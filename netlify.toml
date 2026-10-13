@@ -1,0 +1,15 @@
+# Netlify builds and deploys on every push/merge to the production branch
+# (main). Pull requests get a deploy preview built the same way.
+[build]
+  command = "bash tool/netlify_build.sh"
+  publish = "build/web"
+
+[build.environment]
+  # Keep in sync with the Flutter version used locally (`flutter --version`).
+  FLUTTER_VERSION = "3.47.4"
+
+# Flutter web is a single-page app: every path is served by index.html.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
