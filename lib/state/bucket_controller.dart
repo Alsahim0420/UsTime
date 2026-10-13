@@ -82,7 +82,8 @@ class BucketController extends ChangeNotifier {
   }
 
   String newId() =>
-      '${DateTime.now().microsecondsSinceEpoch}-${_random.nextInt(1 << 32)}';
+      // Not `1 << 32`: on the web that shift overflows to 0.
+      '${DateTime.now().microsecondsSinceEpoch}-${_random.nextInt(0xFFFFFFFF)}';
 
   /// Creates or updates [item]. [newImages] are stored under their ids and
   /// [removedImageIds] are deleted from storage.

@@ -1,10 +1,12 @@
 import 'dart:typed_data';
 
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../data/bucket_repository.dart';
+import '../data/image_compressor.dart';
 import '../models/bucket_item.dart';
 import '../models/item_event.dart';
 import '../state/bucket_controller.dart';
@@ -80,7 +82,9 @@ class _ItemEditorState extends State<_ItemEditor> {
 
   bool _titleMissing = false;
   bool _saving = false;
-  bool _saveFailed = false;
+  String? _saveError;
+  bool _preparingImages = false;
+  String? _imageError;
 
   bool get _isNew => widget.item == null;
 
@@ -134,15 +138,41 @@ class _ItemEditorState extends State<_ItemEditor> {
       maxHeight: 1600,
       imageQuality: 82,
     );
-    if (files.isEmpty) return;
-    final picked = <String, Uint8List>{
-      for (final file in files)
-        widget.controller.newId(): await file.readAsBytes(),
-    };
+    if (files.isEmpty || !mounted) return;
+    setState(() {
+      _preparingImages = true;
+      _imageError = null;
+    });
+    // Let the "preparing" state paint before the heavy work starts.
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+
+    final picked = <String, Uint8List>{};
+    var unreadable = 0;
+    for (final file in files) {
+      Uint8List? compressed;
+      try {
+        compressed = compressImage(await file.readAsBytes());
+      } catch (_) {
+        compressed = null;
+      }
+      if (compressed == null) {
+        unreadable++;
+      } else {
+        picked[widget.controller.newId()] = compressed;
+      }
+      // Yield between photos so the page stays responsive.
+      await Future<void>.delayed(Duration.zero);
+    }
     if (!mounted) return;
     setState(() {
+      _preparingImages = false;
       _newImages.addAll(picked);
       _imageIds.addAll(picked.keys);
+      if (unreadable > 0) {
+        _imageError = unreadable == 1
+            ? 'No se pudo leer una de las fotos.'
+            : 'No se pudieron leer $unreadable fotos.';
+      }
     });
   }
 
@@ -169,7 +199,7 @@ class _ItemEditorState extends State<_ItemEditor> {
     _addLink();
     setState(() {
       _saving = true;
-      _saveFailed = false;
+      _saveError = null;
     });
 
     final existing = widget.item;
@@ -201,20 +231,38 @@ class _ItemEditorState extends State<_ItemEditor> {
         newImages: _newImages,
         removedImageIds: _removedImageIds,
       );
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _saveFailed = true;
+        _saveError = _describeSaveError(error);
       });
       return;
     }
     if (mounted) Navigator.of(context).pop(EditorResult.saved);
   }
 
+  /// Explains a failed save, keeping the service's error code visible so it
+  /// can be reported.
+  String _describeSaveError(Object error) {
+    if (error is! FirebaseException) {
+      return 'No se pudo guardar. Intenta de nuevo.';
+    }
+    final where = error.plugin == 'firebase_storage' ? 'las fotos' : 'el plan';
+    return switch (error.code) {
+      'unauthorized' || 'permission-denied' =>
+        'No hay permiso para guardar $where (${error.code}).',
+      'unavailable' ||
+      'retry-limit-exceeded' ||
+      'network-request-failed' => 'No se pudo guardar. Revisa tu conexión.',
+      _ => 'No se pudo guardar $where (${error.code}).',
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
+    final saveError = _saveError;
     final history = widget.item?.history ?? const <ItemEvent>[];
     final categories = widget.controller.categories;
     return Dialog(
@@ -363,8 +411,23 @@ class _ItemEditorState extends State<_ItemEditor> {
                             image: _image(id),
                             onRemove: () => _removeImage(id),
                           ),
-                        _AddImageTile(onTap: _pickImages),
+                        _AddImageTile(
+                          busy: _preparingImages,
+                          onTap: _pickImages,
+                        ),
                       ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _imageError ??
+                          'Opcional. Las fotos se reducen a 300 KB como '
+                              'máximo para que carguen rápido.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: _imageError == null
+                            ? palette.muted
+                            : AppColors.danger,
+                      ),
                     ),
                     const SizedBox(height: 18),
                     Material(
@@ -432,13 +495,13 @@ class _ItemEditorState extends State<_ItemEditor> {
                       ),
                     ),
                   Expanded(
-                    child: _saveFailed
-                        ? const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 12),
+                    child: saveError != null
+                        ? Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
                             child: Text(
-                              'No se pudo guardar. Revisa tu conexión.',
+                              saveError,
                               textAlign: TextAlign.end,
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontSize: 12.5,
                                 color: AppColors.danger,
                               ),
@@ -447,7 +510,7 @@ class _ItemEditorState extends State<_ItemEditor> {
                         : const SizedBox.shrink(),
                   ),
                   FilledButton(
-                    onPressed: _saving ? null : _save,
+                    onPressed: _saving || _preparingImages ? null : _save,
                     child: Text(_isNew ? 'Agregar' : 'Guardar'),
                   ),
                 ],
@@ -691,9 +754,12 @@ class _ImageTile extends StatelessWidget {
 }
 
 class _AddImageTile extends StatelessWidget {
-  const _AddImageTile({required this.onTap});
+  const _AddImageTile({required this.onTap, this.busy = false});
 
   final VoidCallback onTap;
+
+  /// True while picked photos are being compressed.
+  final bool busy;
 
   @override
   Widget build(BuildContext context) {
@@ -706,20 +772,30 @@ class _AddImageTile extends StatelessWidget {
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: onTap,
+        onTap: busy ? null : onTap,
         child: SizedBox.square(
           dimension: 92,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.add_photo_alternate_outlined, color: AppColors.rose),
-              SizedBox(height: 4),
-              Text(
-                'Galería',
-                style: TextStyle(fontSize: 12, color: palette.muted),
-              ),
-            ],
-          ),
+          child: busy
+              ? const Center(
+                  child: SizedBox.square(
+                    dimension: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2.5),
+                  ),
+                )
+              : Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.add_photo_alternate_outlined,
+                      color: AppColors.rose,
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'Galería',
+                      style: TextStyle(fontSize: 12, color: palette.muted),
+                    ),
+                  ],
+                ),
         ),
       ),
     );
