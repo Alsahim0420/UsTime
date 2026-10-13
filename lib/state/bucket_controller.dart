@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
@@ -10,12 +11,17 @@ class BucketController extends ChangeNotifier {
 
   final BucketRepository _repository;
   final _random = Random();
-  final Map<String, Future<Uint8List?>> _imageCache = {};
+  final Map<String, Future<ImageData?>> _imageCache = {};
 
   List<BucketItem> _items = [];
   bool _loading = true;
+  Object? _error;
+  StreamSubscription<List<BucketItem>>? _subscription;
 
   bool get loading => _loading;
+
+  /// Set when the list could not be read, e.g. the account has no access.
+  Object? get error => _error;
 
   /// Pending first, then newest first.
   List<BucketItem> get items => _items;
@@ -26,11 +32,36 @@ class BucketController extends ChangeNotifier {
   int countFor(BucketCategory category) =>
       _items.where((i) => i.category == category).length;
 
-  Future<void> load() async {
-    _items = await _repository.loadItems();
-    _sort();
-    _loading = false;
-    notifyListeners();
+  /// Starts listening to the shared list. Completes once the first result
+  /// (or error) arrives; later changes by anyone keep updating [items].
+  Future<void> load() {
+    final first = Completer<void>();
+    void done() {
+      _loading = false;
+      notifyListeners();
+      if (!first.isCompleted) first.complete();
+    }
+
+    _subscription?.cancel();
+    _subscription = _repository.watchItems().listen(
+      (items) {
+        _items = [...items];
+        _sort();
+        _error = null;
+        done();
+      },
+      onError: (Object error) {
+        _error = error;
+        done();
+      },
+    );
+    return first.future;
+  }
+
+  @override
+  void dispose() {
+    _subscription?.cancel();
+    super.dispose();
   }
 
   String newId() =>
@@ -45,10 +76,8 @@ class BucketController extends ChangeNotifier {
   }) async {
     for (final entry in newImages.entries) {
       await _repository.saveImage(entry.key, entry.value);
-      _imageCache[entry.key] = Future.value(entry.value);
+      _imageCache[entry.key] = Future.value(ImageData.bytes(entry.value));
     }
-    await _repository.saveItem(item);
-    await _deleteImages(removedImageIds);
 
     final index = _items.indexWhere((i) => i.id == item.id);
     if (index == -1) {
@@ -58,6 +87,9 @@ class BucketController extends ChangeNotifier {
     }
     _sort();
     notifyListeners();
+
+    await _repository.saveItem(item);
+    await _deleteImages(removedImageIds);
   }
 
   Future<void> toggleDone(BucketItem item) {
@@ -74,14 +106,14 @@ class BucketController extends ChangeNotifier {
   /// Removes the item from the list but keeps its images, so the removal can
   /// be undone with [save]. Call [purgeImages] once undo is no longer possible.
   Future<void> remove(BucketItem item) async {
-    await _repository.deleteItem(item.id);
     _items.removeWhere((i) => i.id == item.id);
     notifyListeners();
+    await _repository.deleteItem(item.id);
   }
 
   Future<void> purgeImages(BucketItem item) => _deleteImages(item.imageIds);
 
-  Future<Uint8List?> image(String id) =>
+  Future<ImageData?> image(String id) =>
       _imageCache.putIfAbsent(id, () => _repository.loadImage(id));
 
   Future<void> _deleteImages(List<String> ids) async {

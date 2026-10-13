@@ -1,0 +1,22 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Only the two of us. Add or change emails here and in storage.rules,
+    // then run: firebase deploy --only firestore:rules,storage
+    function isUs() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in ['panmecar@gmail.com'];
+    }
+
+    match /items/{itemId} {
+      allow read, write: if isUs();
+    }
+
+    // Bookkeeping, e.g. the marker that the original list was loaded.
+    match /meta/{docId} {
+      allow read, write: if isUs();
+    }
+  }
+}

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../data/bucket_repository.dart';
 import '../models/bucket_item.dart';
 import '../state/bucket_controller.dart';
 import '../theme.dart';
@@ -71,6 +72,7 @@ class _ItemEditorState extends State<_ItemEditor> {
 
   bool _titleMissing = false;
   bool _saving = false;
+  bool _saveFailed = false;
 
   bool get _isNew => widget.item == null;
 
@@ -143,9 +145,11 @@ class _ItemEditorState extends State<_ItemEditor> {
     });
   }
 
-  Future<Uint8List?> _imageBytes(String id) {
+  Future<ImageData?> _image(String id) {
     final fresh = _newImages[id];
-    return fresh != null ? Future.value(fresh) : widget.controller.image(id);
+    return fresh != null
+        ? Future.value(ImageData.bytes(fresh))
+        : widget.controller.image(id);
   }
 
   Future<void> _save() async {
@@ -155,7 +159,10 @@ class _ItemEditorState extends State<_ItemEditor> {
       return;
     }
     _addLink();
-    setState(() => _saving = true);
+    setState(() {
+      _saving = true;
+      _saveFailed = false;
+    });
 
     final existing = widget.item;
     final base =
@@ -180,11 +187,20 @@ class _ItemEditorState extends State<_ItemEditor> {
       clearPlannedAt: _plannedAt == null,
     );
 
-    await widget.controller.save(
-      item,
-      newImages: _newImages,
-      removedImageIds: _removedImageIds,
-    );
+    try {
+      await widget.controller.save(
+        item,
+        newImages: _newImages,
+        removedImageIds: _removedImageIds,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _saveFailed = true;
+      });
+      return;
+    }
     if (mounted) Navigator.of(context).pop(EditorResult.saved);
   }
 
@@ -321,7 +337,7 @@ class _ItemEditorState extends State<_ItemEditor> {
                       children: [
                         for (final id in _imageIds)
                           _ImageTile(
-                            bytes: _imageBytes(id),
+                            image: _image(id),
                             onRemove: () => _removeImage(id),
                           ),
                         _AddImageTile(onTap: _pickImages),
@@ -384,7 +400,21 @@ class _ItemEditorState extends State<_ItemEditor> {
                         foregroundColor: const Color(0xFFD0607A),
                       ),
                     ),
-                  const Spacer(),
+                  Expanded(
+                    child: _saveFailed
+                        ? const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 12),
+                            child: Text(
+                              'No se pudo guardar. Revisa tu conexión.',
+                              textAlign: TextAlign.end,
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                color: Color(0xFFD0607A),
+                              ),
+                            ),
+                          )
+                        : const SizedBox.shrink(),
+                  ),
                   FilledButton(
                     onPressed: _saving ? null : _save,
                     child: Text(_isNew ? 'Agregar' : 'Guardar'),
@@ -525,9 +555,9 @@ class _LinkRow extends StatelessWidget {
 }
 
 class _ImageTile extends StatelessWidget {
-  const _ImageTile({required this.bytes, required this.onRemove});
+  const _ImageTile({required this.image, required this.onRemove});
 
-  final Future<Uint8List?> bytes;
+  final Future<ImageData?> image;
   final VoidCallback onRemove;
 
   @override
@@ -540,8 +570,8 @@ class _ImageTile extends StatelessWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(16),
             child: GestureDetector(
-              onTap: () => showImageViewer(context, bytes),
-              child: StoredImage(bytes: bytes),
+              onTap: () => showImageViewer(context, image),
+              child: StoredImage(image: image),
             ),
           ),
           Positioned(

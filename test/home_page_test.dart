@@ -15,7 +15,7 @@ class _SeededRepository implements BucketRepository {
   final items = {for (final item in buildSeedItems()) item.id: item};
 
   @override
-  Future<List<BucketItem>> loadItems() async => items.values.toList();
+  Stream<List<BucketItem>> watchItems() => Stream.value(items.values.toList());
   @override
   Future<void> saveItem(BucketItem item) async => items[item.id] = item;
   @override
@@ -23,7 +23,7 @@ class _SeededRepository implements BucketRepository {
   @override
   Future<void> saveImage(String id, Uint8List bytes) async {}
   @override
-  Future<Uint8List?> loadImage(String id) async => null;
+  Future<ImageData?> loadImage(String id) async => null;
   @override
   Future<void> deleteImage(String id) async {}
 }

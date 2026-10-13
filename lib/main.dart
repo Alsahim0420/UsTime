@@ -1,22 +1,19 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
-import 'data/bucket_repository.dart';
-import 'state/bucket_controller.dart';
+import 'firebase_options.dart';
 import 'theme.dart';
-import 'ui/home_page.dart';
+import 'ui/auth_gate.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final repository = await LocalBucketRepository.open();
-  final controller = BucketController(repository)..load();
-  runApp(UsTimeApp(controller: controller));
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  runApp(const UsTimeApp());
 }
 
 class UsTimeApp extends StatelessWidget {
-  const UsTimeApp({super.key, required this.controller});
-
-  final BucketController controller;
+  const UsTimeApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -27,7 +24,7 @@ class UsTimeApp extends StatelessWidget {
       locale: const Locale('es'),
       supportedLocales: const [Locale('es')],
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
-      home: HomePage(controller: controller),
+      home: const AuthGate(),
     );
   }
 }

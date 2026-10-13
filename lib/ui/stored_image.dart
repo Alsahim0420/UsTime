@@ -1,32 +1,45 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 
+import '../data/bucket_repository.dart';
 import '../theme.dart';
 
-/// Shows image bytes that are loaded asynchronously from storage.
+/// Shows an image that is resolved asynchronously from storage.
 class StoredImage extends StatelessWidget {
-  const StoredImage({super.key, required this.bytes, this.fit = BoxFit.cover});
+  const StoredImage({super.key, required this.image, this.fit = BoxFit.cover});
 
-  final Future<Uint8List?> bytes;
+  final Future<ImageData?> image;
   final BoxFit fit;
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<Uint8List?>(
-      future: bytes,
+    const placeholder = ColoredBox(color: AppColors.lavender);
+    return FutureBuilder<ImageData?>(
+      future: image,
       builder: (context, snapshot) {
         final data = snapshot.data;
-        if (data == null) {
-          return const ColoredBox(color: AppColors.lavender);
+        final bytes = data?.bytes;
+        final url = data?.url;
+        if (bytes != null) {
+          return Image.memory(bytes, fit: fit, gaplessPlayback: true);
         }
-        return Image.memory(data, fit: fit, gaplessPlayback: true);
+        if (url != null) {
+          return Image.network(
+            url,
+            fit: fit,
+            gaplessPlayback: true,
+            // Falls back to an <img> element when the bucket has no CORS
+            // configuration, so photos show either way.
+            webHtmlElementStrategy: WebHtmlElementStrategy.fallback,
+            errorBuilder: (context, error, stackTrace) => placeholder,
+          );
+        }
+        return placeholder;
       },
     );
   }
 }
 
-void showImageViewer(BuildContext context, Future<Uint8List?> bytes) {
+void showImageViewer(BuildContext context, Future<ImageData?> image) {
   showDialog<void>(
     context: context,
     barrierColor: Colors.black87,
@@ -35,7 +48,7 @@ void showImageViewer(BuildContext context, Future<Uint8List?> bytes) {
       child: InteractiveViewer(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: StoredImage(bytes: bytes, fit: BoxFit.contain),
+          child: StoredImage(image: image, fit: BoxFit.contain),
         ),
       ),
     ),

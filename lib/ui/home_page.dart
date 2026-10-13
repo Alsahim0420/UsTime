@@ -16,9 +16,12 @@ enum _Status {
 }
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key, required this.controller});
+  const HomePage({super.key, required this.controller, this.onSignOut});
 
   final BucketController controller;
+
+  /// When set, a sign-out button is shown in the header.
+  final VoidCallback? onSignOut;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -62,8 +65,31 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  /// Runs a write and tells the user if it fails (offline, no permission).
+  /// Returns whether it succeeded.
+  Future<bool> _guard(Future<void> write) async {
+    try {
+      await write;
+      return true;
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(
+            const SnackBar(
+              width: 420,
+              content: Text(
+                'No se pudo guardar el cambio. Revisa tu conexión.',
+              ),
+            ),
+          );
+      }
+      return false;
+    }
+  }
+
   Future<void> _delete(BucketItem item) async {
-    await _controller.remove(item);
+    if (!await _guard(_controller.remove(item))) return;
     if (!mounted) return;
     final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
     final snackBar = messenger.showSnackBar(
@@ -74,7 +100,7 @@ class _HomePageState extends State<HomePage> {
         action: SnackBarAction(
           label: 'Deshacer',
           textColor: const Color(0xFFF7B6D2),
-          onPressed: () => _controller.save(item),
+          onPressed: () => _guard(_controller.save(item)),
         ),
       ),
     );
@@ -131,14 +157,28 @@ class _HomePageState extends State<HomePage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'US TIME',
-                      style: TextStyle(
-                        fontSize: 12,
-                        letterSpacing: 3,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.amethyst,
-                      ),
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'US TIME',
+                            style: TextStyle(
+                              fontSize: 12,
+                              letterSpacing: 3,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.amethyst,
+                            ),
+                          ),
+                        ),
+                        if (widget.onSignOut != null)
+                          IconButton(
+                            tooltip: 'Cerrar sesión',
+                            onPressed: widget.onSignOut,
+                            visualDensity: VisualDensity.compact,
+                            color: AppColors.muted,
+                            icon: const Icon(Icons.logout_rounded, size: 20),
+                          ),
+                      ],
                     ),
                     const SizedBox(height: 6),
                     Text(
@@ -210,7 +250,7 @@ class _HomePageState extends State<HomePage> {
                       item: item,
                       imageFor: _controller.image,
                       onTap: () => _openEditor(item),
-                      onToggleDone: () => _controller.toggleDone(item),
+                      onToggleDone: () => _guard(_controller.toggleDone(item)),
                       onOpenLink: openLink,
                     );
                   },

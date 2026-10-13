@@ -1,0 +1,19 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Keep this list in sync with firestore.rules.
+    function isUs() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in ['panmecar@gmail.com'];
+    }
+
+    match /images/{imageId} {
+      allow read, delete: if isUs();
+      allow create, update: if isUs()
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+  }
+}

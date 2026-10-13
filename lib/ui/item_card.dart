@@ -1,7 +1,6 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 
+import '../data/bucket_repository.dart';
 import '../models/bucket_item.dart';
 import '../theme.dart';
 import 'stored_image.dart';
@@ -17,7 +16,7 @@ class ItemCard extends StatelessWidget {
   });
 
   final BucketItem item;
-  final Future<Uint8List?> Function(String id) imageFor;
+  final Future<ImageData?> Function(String id) imageFor;
   final VoidCallback onTap;
   final VoidCallback onToggleDone;
   final ValueChanged<String> onOpenLink;
@@ -148,7 +147,7 @@ class _Thumb extends StatelessWidget {
   const _Thumb({required this.item, required this.imageFor});
 
   final BucketItem item;
-  final Future<Uint8List?> Function(String id) imageFor;
+  final Future<ImageData?> Function(String id) imageFor;
 
   @override
   Widget build(BuildContext context) {
@@ -166,7 +165,7 @@ class _Thumb extends StatelessWidget {
                   ),
                 ),
               )
-            : StoredImage(bytes: imageFor(item.imageIds.first)),
+            : StoredImage(image: imageFor(item.imageIds.first)),
       ),
     );
   }

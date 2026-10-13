@@ -11,7 +11,7 @@ class _MemoryRepository implements BucketRepository {
   final images = <String, Uint8List>{};
 
   @override
-  Future<List<BucketItem>> loadItems() async => items.values.toList();
+  Stream<List<BucketItem>> watchItems() => Stream.value(items.values.toList());
   @override
   Future<void> saveItem(BucketItem item) async => items[item.id] = item;
   @override
@@ -20,7 +20,11 @@ class _MemoryRepository implements BucketRepository {
   Future<void> saveImage(String id, Uint8List bytes) async =>
       images[id] = bytes;
   @override
-  Future<Uint8List?> loadImage(String id) async => images[id];
+  Future<ImageData?> loadImage(String id) async {
+    final bytes = images[id];
+    return bytes == null ? null : ImageData.bytes(bytes);
+  }
+
   @override
   Future<void> deleteImage(String id) async => images.remove(id);
 }
