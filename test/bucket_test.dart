@@ -2,9 +2,10 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ustime/data/bucket_repository.dart';
-import 'package:ustime/data/seed_data.dart';
 import 'package:ustime/models/bucket_item.dart';
 import 'package:ustime/state/bucket_controller.dart';
+
+import 'sample_items.dart';
 
 class _MemoryRepository implements BucketRepository {
   final items = <String, BucketItem>{};
@@ -54,16 +55,10 @@ void main() {
     expect(linkLabel('https://www.instagram.com/reel/1'), 'instagram.com');
   });
 
-  test('seed list has unique ids and keeps the original order', () {
-    final seed = buildSeedItems();
-    expect(seed.map((i) => i.id).toSet().length, seed.length);
-    expect(seed.first.title, 'Cosaica');
-  });
-
   test('controller toggles, sorts, deletes and restores', () async {
     final repository = _MemoryRepository();
     final controller = BucketController(repository);
-    for (final item in buildSeedItems().take(3)) {
+    for (final item in sampleItems()) {
       await repository.saveItem(item);
     }
     await controller.load();

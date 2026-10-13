@@ -2,52 +2,137 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../data/firebase_bucket_repository.dart';
+import '../data/spaces_repository.dart';
+import '../models/space.dart';
+import '../state/account_controller.dart';
 import '../state/bucket_controller.dart';
 import '../theme.dart';
+import 'avatar.dart';
 import 'home_page.dart';
+import 'page_scaffold.dart';
+import 'profile_page.dart';
+import 'space_dialogs.dart';
 
-/// Shows the sign-in screen until someone signs in with Google, then the
-/// shared list. Who is allowed in is decided by the Firebase security rules.
+/// Shows the sign-in screen until someone signs in with Google, then their
+/// active shared list.
 class AuthGate extends StatelessWidget {
-  const AuthGate({super.key});
+  const AuthGate({super.key, required this.themeMode});
+
+  /// Updated with the signed-in user's theme setting.
+  final ValueNotifier<ThemeMode> themeMode;
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
+      stream: FirebaseAuth.instance.userChanges(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const _Backdrop(child: CircularProgressIndicator());
+          return const Backdrop(child: CircularProgressIndicator());
         }
         final user = snapshot.data;
         if (user == null) return const _SignInPage();
-        return _Session(key: ValueKey(user.uid), user: user);
+        return _Session(
+          key: ValueKey(user.uid),
+          user: user,
+          themeMode: themeMode,
+        );
       },
     );
   }
 }
 
-/// Owns the list controller for the signed-in user.
+/// Owns the account state for the signed-in user.
 class _Session extends StatefulWidget {
-  const _Session({super.key, required this.user});
+  const _Session({super.key, required this.user, required this.themeMode});
 
   final User user;
+  final ValueNotifier<ThemeMode> themeMode;
 
   @override
   State<_Session> createState() => _SessionState();
 }
 
 class _SessionState extends State<_Session> {
-  final _repository = FirebaseBucketRepository();
-  late final _controller = BucketController(_repository);
-  late final Future<void> _ready = _start();
+  late final _account = AccountController(widget.user.uid, SpacesRepository());
 
-  Future<void> _start() async {
-    await _repository.seedIfNeeded();
-    await _controller.load();
-    final error = _controller.error;
-    if (error != null) throw error;
+  @override
+  void initState() {
+    super.initState();
+    _account
+      ..addListener(_syncTheme)
+      ..start();
   }
+
+  void _syncTheme() => widget.themeMode.value = _account.themeMode;
+
+  @override
+  void dispose() {
+    _account.dispose();
+    // The next person on this device starts with the system theme. Deferred
+    // because the app can't rebuild while this widget is being removed.
+    final themeMode = widget.themeMode;
+    Future.microtask(() => themeMode.value = ThemeMode.system);
+    super.dispose();
+  }
+
+  void _openProfile() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => ProfilePage(user: widget.user, account: _account),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = widget.user;
+    return ListenableBuilder(
+      listenable: _account,
+      builder: (context, _) {
+        if (_account.error != null) return const _ErrorPage();
+        if (_account.loading) {
+          return const Backdrop(child: CircularProgressIndicator());
+        }
+        final space = _account.activeSpace;
+        if (space == null) {
+          return _WelcomePage(user: user, account: _account);
+        }
+        return _SpaceView(
+          key: ValueKey(space.id),
+          space: space,
+          trailing: Tooltip(
+            message: 'Perfil',
+            child: InkResponse(
+              onTap: _openProfile,
+              radius: 26,
+              child: Avatar(
+                photoUrl: user.photoURL,
+                name: user.displayName,
+                size: 38,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Shows the items of one shared list.
+class _SpaceView extends StatefulWidget {
+  const _SpaceView({super.key, required this.space, required this.trailing});
+
+  final Space space;
+  final Widget trailing;
+
+  @override
+  State<_SpaceView> createState() => _SpaceViewState();
+}
+
+class _SpaceViewState extends State<_SpaceView> {
+  late final _controller = BucketController(
+    FirebaseBucketRepository(widget.space.id),
+  )..load();
 
   @override
   void dispose() {
@@ -57,20 +142,65 @@ class _SessionState extends State<_Session> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<void>(
-      future: _ready,
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return _NoAccessPage(email: widget.user.email, error: snapshot.error);
-        }
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const _Backdrop(child: CircularProgressIndicator());
-        }
-        return HomePage(
-          controller: _controller,
-          onSignOut: FirebaseAuth.instance.signOut,
-        );
-      },
+    return HomePage(
+      controller: _controller,
+      title: widget.space.name,
+      trailing: widget.trailing,
+    );
+  }
+}
+
+/// First screen for someone who isn't in any list yet.
+class _WelcomePage extends StatelessWidget {
+  const _WelcomePage({required this.user, required this.account});
+
+  final User user;
+  final AccountController account;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    final firstName = user.displayName?.trim().split(' ').first ?? '';
+    return Backdrop(
+      child: _Panel(
+        header: Avatar(
+          photoUrl: user.photoURL,
+          name: user.displayName,
+          size: 72,
+        ),
+        children: [
+          Text(
+            firstName.isEmpty ? '¡Hola!' : '¡Hola, $firstName!',
+            textAlign: TextAlign.center,
+            style: displayStyle(size: 28),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Crea una lista para compartir con tu pareja o amigos, o únete '
+            'a una con el código que te enviaron.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: palette.muted),
+          ),
+          const SizedBox(height: 24),
+          FilledButton.icon(
+            onPressed: () => showCreateSpaceDialog(context, account),
+            icon: const Icon(Icons.add_rounded),
+            label: const Text('Crear una lista'),
+          ),
+          const SizedBox(height: 10),
+          TextButton.icon(
+            onPressed: () => showJoinSpaceDialog(context, account),
+            icon: const Icon(Icons.group_add_outlined),
+            label: const Text('Tengo un código'),
+          ),
+          const SizedBox(height: 4),
+          TextButton(
+            onPressed: FirebaseAuth.instance.signOut,
+            style: TextButton.styleFrom(foregroundColor: palette.muted),
+            child: const Text('Cerrar sesión'),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -120,15 +250,15 @@ class _SignInPageState extends State<_SignInPage> {
   @override
   Widget build(BuildContext context) {
     final message = _message;
-    return _Backdrop(
+    return Backdrop(
       child: _Panel(
         children: [
           Text('Us Time', style: displayStyle(size: 34)),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             'Nuestra lista de cositas por hacer juntos',
             textAlign: TextAlign.center,
-            style: TextStyle(color: AppColors.muted),
+            style: TextStyle(color: context.palette.muted),
           ),
           const SizedBox(height: 28),
           FilledButton.icon(
@@ -141,7 +271,7 @@ class _SignInPageState extends State<_SignInPage> {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13, color: Color(0xFFD0607A)),
+              style: const TextStyle(fontSize: 13, color: AppColors.danger),
             ),
           ],
         ],
@@ -150,95 +280,76 @@ class _SignInPageState extends State<_SignInPage> {
   }
 }
 
-class _NoAccessPage extends StatelessWidget {
-  const _NoAccessPage({required this.email, required this.error});
-
-  final String? email;
-  final Object? error;
+class _ErrorPage extends StatelessWidget {
+  const _ErrorPage();
 
   @override
   Widget build(BuildContext context) {
-    final error = this.error;
-    final denied =
-        error is FirebaseException && error.code == 'permission-denied';
-    return _Backdrop(
+    return Backdrop(
       child: _Panel(
         children: [
           Text(
-            denied ? 'Esta lista es privada' : 'No pudimos abrir la lista',
+            'No pudimos abrir tus listas',
             textAlign: TextAlign.center,
             style: displayStyle(size: 26),
           ),
           const SizedBox(height: 10),
           Text(
-            denied
-                ? 'La cuenta ${email ?? ''} no tiene acceso.'
-                : 'Revisa tu conexión e intenta de nuevo.',
+            'Revisa tu conexión y vuelve a entrar.',
             textAlign: TextAlign.center,
-            style: const TextStyle(color: AppColors.muted),
+            style: TextStyle(color: context.palette.muted),
           ),
           const SizedBox(height: 24),
-          FilledButton(
-            onPressed: FirebaseAuth.instance.signOut,
-            child: const Text('Usar otra cuenta'),
-          ),
+          const FilledButton(onPressed: _signOut, child: Text('Cerrar sesión')),
         ],
       ),
     );
   }
 }
 
-class _Backdrop extends StatelessWidget {
-  const _Backdrop({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: DecoratedBox(
-        decoration: const BoxDecoration(gradient: AppColors.background),
-        child: Center(child: child),
-      ),
-    );
-  }
-}
+void _signOut() => FirebaseAuth.instance.signOut();
 
 class _Panel extends StatelessWidget {
-  const _Panel({required this.children});
+  const _Panel({required this.children, this.header});
 
+  /// Shown above the content; the app's heart badge by default.
+  final Widget? header;
   final List<Widget> children;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.all(24),
-      padding: const EdgeInsets.fromLTRB(32, 36, 32, 32),
-      constraints: const BoxConstraints(maxWidth: 400),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(30),
-        boxShadow: softShadow(1.6),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(
-              gradient: AppColors.hero,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: const Icon(
-              Icons.favorite_rounded,
-              color: Colors.white,
-              size: 32,
-            ),
-          ),
-          const SizedBox(height: 20),
-          ...children,
-        ],
+    final palette = context.palette;
+    return SingleChildScrollView(
+      child: Container(
+        margin: const EdgeInsets.all(24),
+        padding: const EdgeInsets.fromLTRB(32, 36, 32, 28),
+        constraints: const BoxConstraints(maxWidth: 400),
+        decoration: BoxDecoration(
+          color: palette.surface,
+          borderRadius: BorderRadius.circular(30),
+          boxShadow: palette.shadow(1.6),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            header ??
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    gradient: AppColors.hero,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Icon(
+                    Icons.favorite_rounded,
+                    color: Colors.white,
+                    size: 32,
+                  ),
+                ),
+            const SizedBox(height: 20),
+            ...children,
+          ],
+        ),
       ),
     );
   }

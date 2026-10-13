@@ -16,12 +16,20 @@ enum _Status {
 }
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key, required this.controller, this.onSignOut});
+  const HomePage({
+    super.key,
+    required this.controller,
+    this.title = 'Nuestra lista de cositas',
+    this.trailing,
+  });
 
   final BucketController controller;
 
-  /// When set, a sign-out button is shown in the header.
-  final VoidCallback? onSignOut;
+  /// Name of the list, shown as the page heading.
+  final String title;
+
+  /// Shown at the top right, e.g. the profile button.
+  final Widget? trailing;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -112,11 +120,12 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _openEditor,
-        backgroundColor: AppColors.amethyst,
-        foregroundColor: Colors.white,
+        backgroundColor: palette.amethyst,
+        foregroundColor: palette.surface,
         elevation: 3,
         icon: const Icon(Icons.add_rounded),
         label: const Text(
@@ -125,7 +134,7 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
       body: DecoratedBox(
-        decoration: const BoxDecoration(gradient: AppColors.background),
+        decoration: BoxDecoration(gradient: palette.background),
         child: SafeArea(
           child: ListenableBuilder(
             listenable: _controller,
@@ -142,6 +151,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildContent() {
+    final palette = context.palette;
     final items = _visibleItems;
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -159,30 +169,23 @@ class _HomePageState extends State<HomePage> {
                   children: [
                     Row(
                       children: [
-                        const Expanded(
+                        Expanded(
                           child: Text(
                             'US TIME',
                             style: TextStyle(
                               fontSize: 12,
                               letterSpacing: 3,
                               fontWeight: FontWeight.w700,
-                              color: AppColors.amethyst,
+                              color: palette.amethyst,
                             ),
                           ),
                         ),
-                        if (widget.onSignOut != null)
-                          IconButton(
-                            tooltip: 'Cerrar sesión',
-                            onPressed: widget.onSignOut,
-                            visualDensity: VisualDensity.compact,
-                            color: AppColors.muted,
-                            icon: const Icon(Icons.logout_rounded, size: 20),
-                          ),
+                        ?widget.trailing,
                       ],
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'Nuestra lista de cositas',
+                      widget.title,
                       style: displayStyle(
                         size: constraints.maxWidth < 600 ? 30 : 40,
                       ),
@@ -263,12 +266,13 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildFilters(bool wide) {
+    final palette = context.palette;
     final search = TextField(
       controller: _search,
       onChanged: (_) => setState(() {}),
       decoration: InputDecoration(
         hintText: 'Buscar un plan, un lugar…',
-        prefixIcon: const Icon(Icons.search_rounded, color: AppColors.muted),
+        prefixIcon: Icon(Icons.search_rounded, color: palette.muted),
         suffixIcon: _search.text.isEmpty
             ? null
             : IconButton(
@@ -287,10 +291,10 @@ class _HomePageState extends State<HomePage> {
       selected: {_status},
       onSelectionChanged: (value) => setState(() => _status = value.first),
       style: SegmentedButton.styleFrom(
-        backgroundColor: Colors.white,
-        selectedBackgroundColor: AppColors.lavender,
-        selectedForegroundColor: AppColors.amethyst,
-        side: const BorderSide(color: AppColors.line),
+        backgroundColor: palette.surface,
+        selectedBackgroundColor: palette.soft,
+        selectedForegroundColor: palette.amethyst,
+        side: BorderSide(color: palette.line),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
       ),
     );
@@ -319,6 +323,7 @@ class _ProgressCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final progress = total == 0 ? 0.0 : done / total;
     final pending = total - done;
     final message = total == 0
@@ -334,7 +339,7 @@ class _ProgressCard extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: AppColors.hero,
         borderRadius: BorderRadius.circular(28),
-        boxShadow: softShadow(2.4),
+        boxShadow: palette.shadow(2.4),
       ),
       child: Row(
         children: [
@@ -411,17 +416,16 @@ class _CategoryChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final foreground = selected ? Colors.white : AppColors.ink;
+    final palette = context.palette;
+    final foreground = selected ? palette.surface : palette.ink;
     return Padding(
       padding: const EdgeInsets.only(right: 10),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         decoration: BoxDecoration(
-          color: selected ? AppColors.amethyst : Colors.white,
+          color: selected ? palette.amethyst : palette.surface,
           borderRadius: BorderRadius.circular(30),
-          border: Border.all(
-            color: selected ? AppColors.amethyst : AppColors.line,
-          ),
+          border: Border.all(color: selected ? palette.amethyst : palette.line),
         ),
         child: Material(
           type: MaterialType.transparency,
@@ -469,6 +473,7 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Padding(
       padding: const EdgeInsets.fromLTRB(32, 48, 32, 120),
       child: Column(
@@ -486,7 +491,7 @@ class _EmptyState extends StatelessWidget {
                 ? 'Prueben con otra búsqueda o filtro.'
                 : 'Agreguen el primer plan que quieran vivir juntos.',
             textAlign: TextAlign.center,
-            style: const TextStyle(color: AppColors.muted),
+            style: TextStyle(color: palette.muted),
           ),
           if (!filtered) ...[
             const SizedBox(height: 20),

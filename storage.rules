@@ -2,16 +2,16 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-    // Keep this list in sync with firestore.rules.
-    function isUs() {
+    // Photos belong to a shared list; only its members (looked up in
+    // Firestore) can see or change them.
+    function isMember(spaceId) {
       return request.auth != null
-        && request.auth.token.email_verified == true
-        && request.auth.token.email in ['panmecar@gmail.com'];
+        && request.auth.uid in firestore.get(/databases/(default)/documents/spaces/$(spaceId)).data.members;
     }
 
-    match /images/{imageId} {
-      allow read, delete: if isUs();
-      allow create, update: if isUs()
+    match /spaces/{spaceId}/images/{imageId} {
+      allow read, delete: if isMember(spaceId);
+      allow create, update: if isMember(spaceId)
         && request.resource.size < 10 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');
     }

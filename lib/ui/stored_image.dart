@@ -12,7 +12,8 @@ class StoredImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const placeholder = ColoredBox(color: AppColors.lavender);
+    final palette = context.palette;
+    final placeholder = ColoredBox(color: palette.soft);
     return FutureBuilder<ImageData?>(
       future: image,
       builder: (context, snapshot) {

@@ -23,6 +23,7 @@ class ItemCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final meta = [
       if (item.location.isNotEmpty) item.location,
       if (item.note.isNotEmpty) item.note,
@@ -33,9 +34,9 @@ class ItemCard extends StatelessWidget {
       opacity: item.done ? 0.72 : 1,
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: palette.surface,
           borderRadius: BorderRadius.circular(24),
-          boxShadow: softShadow(),
+          boxShadow: palette.shadow(),
         ),
         child: Material(
           type: MaterialType.transparency,
@@ -64,7 +65,7 @@ class ItemCard extends StatelessWidget {
                             decoration: item.done
                                 ? TextDecoration.lineThrough
                                 : null,
-                            decorationColor: AppColors.muted,
+                            decorationColor: palette.muted,
                           ),
                         ),
                         if (meta.isNotEmpty) ...[
@@ -73,9 +74,9 @@ class ItemCard extends StatelessWidget {
                             meta,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 13,
-                              color: AppColors.muted,
+                              color: palette.muted,
                             ),
                           ),
                         ],
@@ -83,7 +84,7 @@ class ItemCard extends StatelessWidget {
                           const SizedBox(height: 7),
                           SingleChildScrollView(
                             scrollDirection: Axis.horizontal,
-                            child: Row(children: _pills()),
+                            child: Row(children: _pills(palette)),
                           ),
                         ],
                       ],
@@ -106,7 +107,7 @@ class ItemCard extends StatelessWidget {
       item.links.isNotEmpty ||
       item.imageIds.length > 1;
 
-  List<Widget> _pills() {
+  List<Widget> _pills(AppPalette palette) {
     final doneAt = item.doneAt;
     final plannedAt = item.plannedAt;
     return [
@@ -128,7 +129,7 @@ class ItemCard extends StatelessWidget {
           label: item.links.length == 1
               ? linkLabel(item.links.first)
               : '${item.links.length} links',
-          color: AppColors.amethyst,
+          color: palette.amethyst,
           onTap: item.links.length == 1
               ? () => onOpenLink(item.links.first)
               : null,
@@ -179,6 +180,7 @@ class _CheckButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Tooltip(
       message: done ? 'Marcar como pendiente' : '¡Ya lo hicimos!',
       child: InkResponse(
@@ -196,12 +198,17 @@ class _CheckButton extends StatelessWidget {
               gradient: done ? AppColors.hero : null,
               border: done
                   ? null
-                  : Border.all(color: const Color(0xFFD9CCEA), width: 2),
+                  : Border.all(
+                      color: palette.muted.withValues(alpha: 0.35),
+                      width: 2,
+                    ),
             ),
             child: Icon(
               Icons.check_rounded,
               size: 20,
-              color: done ? Colors.white : const Color(0xFFD9CCEA),
+              color: done
+                  ? Colors.white
+                  : palette.muted.withValues(alpha: 0.35),
             ),
           ),
         ),

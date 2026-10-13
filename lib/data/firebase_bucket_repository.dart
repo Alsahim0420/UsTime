@@ -5,39 +5,27 @@ import 'package:firebase_storage/firebase_storage.dart';
 
 import '../models/bucket_item.dart';
 import 'bucket_repository.dart';
-import 'seed_data.dart';
 
-/// Shared list: items live in Firestore (`items/{id}`) and photos in Cloud
-/// Storage (`images/{id}`). Access is limited by firestore.rules and
-/// storage.rules.
+/// The items of one shared list: they live in Firestore
+/// (`spaces/{spaceId}/items/{id}`) and their photos in Cloud Storage
+/// (`spaces/{spaceId}/images/{id}`). Only members of the list have access,
+/// enforced by firestore.rules and storage.rules.
 class FirebaseBucketRepository implements BucketRepository {
-  FirebaseBucketRepository({
+  FirebaseBucketRepository(
+    this.spaceId, {
     FirebaseFirestore? firestore,
     FirebaseStorage? storage,
   }) : _firestore = firestore ?? FirebaseFirestore.instance,
        _storage = storage ?? FirebaseStorage.instance;
 
+  final String spaceId;
   final FirebaseFirestore _firestore;
   final FirebaseStorage _storage;
 
   CollectionReference<Map<String, dynamic>> get _items =>
-      _firestore.collection('items');
+      _firestore.collection('spaces/$spaceId/items');
 
-  Reference _image(String id) => _storage.ref('images/$id');
-
-  /// Uploads the original Drive list once. A marker document keeps it from
-  /// coming back after the list has been emptied on purpose.
-  Future<void> seedIfNeeded() async {
-    final marker = _firestore.doc('meta/seed');
-    if ((await marker.get()).exists) return;
-
-    final batch = _firestore.batch();
-    for (final item in buildSeedItems()) {
-      batch.set(_items.doc(item.id), item.toJson());
-    }
-    batch.set(marker, {'seededAt': FieldValue.serverTimestamp()});
-    await batch.commit();
-  }
+  Reference _image(String id) => _storage.ref('spaces/$spaceId/images/$id');
 
   @override
   Stream<List<BucketItem>> watchItems() {

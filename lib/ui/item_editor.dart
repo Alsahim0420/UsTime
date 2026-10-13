@@ -28,7 +28,7 @@ Future<EditorResult?> showItemEditor(
 }) {
   return showDialog<EditorResult>(
     context: context,
-    barrierColor: AppColors.ink.withValues(alpha: 0.35),
+    barrierColor: const Color(0x733B2F4F),
     builder: (context) => _ItemEditor(
       controller: controller,
       item: item,
@@ -206,8 +206,9 @@ class _ItemEditorState extends State<_ItemEditor> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Dialog(
-      backgroundColor: AppColors.blush,
+      backgroundColor: palette.canvas,
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
       clipBehavior: Clip.antiAlias,
@@ -249,12 +250,17 @@ class _ItemEditorState extends State<_ItemEditor> {
                             label: Text('${category.emoji}  ${category.label}'),
                             selected: _category == category,
                             showCheckmark: false,
-                            backgroundColor: Colors.white,
+                            labelStyle: TextStyle(
+                              color: _category == category
+                                  ? const Color(0xFF3B2F4F)
+                                  : palette.ink,
+                            ),
+                            backgroundColor: palette.surface,
                             selectedColor: category.colorA,
                             side: BorderSide(
                               color: _category == category
                                   ? category.colorB
-                                  : AppColors.line,
+                                  : palette.line,
                             ),
                             shape: const StadiumBorder(),
                             onSelected: (_) =>
@@ -325,7 +331,7 @@ class _ItemEditorState extends State<_ItemEditor> {
                           tooltip: 'Agregar link',
                           onPressed: _addLink,
                           icon: const Icon(Icons.add_circle_rounded),
-                          color: AppColors.amethyst,
+                          color: palette.amethyst,
                         ),
                       ),
                       onSubmitted: (_) => _addLink(),
@@ -345,10 +351,10 @@ class _ItemEditorState extends State<_ItemEditor> {
                     ),
                     const SizedBox(height: 18),
                     Material(
-                      color: Colors.white,
+                      color: palette.surface,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
-                        side: const BorderSide(color: AppColors.line),
+                        side: BorderSide(color: palette.line),
                       ),
                       child: SwitchListTile(
                         value: _done,
@@ -397,7 +403,7 @@ class _ItemEditorState extends State<_ItemEditor> {
                       icon: const Icon(Icons.delete_outline_rounded),
                       label: const Text('Eliminar'),
                       style: TextButton.styleFrom(
-                        foregroundColor: const Color(0xFFD0607A),
+                        foregroundColor: AppColors.danger,
                       ),
                     ),
                   Expanded(
@@ -409,7 +415,7 @@ class _ItemEditorState extends State<_ItemEditor> {
                               textAlign: TextAlign.end,
                               style: TextStyle(
                                 fontSize: 12.5,
-                                color: Color(0xFFD0607A),
+                                color: AppColors.danger,
                               ),
                             ),
                           )
@@ -450,28 +456,29 @@ class _DateField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final value = this.value;
     return Material(
-      color: Colors.white,
+      color: palette.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: AppColors.line),
+        side: BorderSide(color: palette.line),
       ),
       child: ListTile(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         contentPadding: const EdgeInsets.only(left: 14, right: 6),
         onTap: onTap,
-        leading: Icon(icon, color: AppColors.amethyst),
+        leading: Icon(icon, color: palette.amethyst),
         title: Text(
           label,
-          style: const TextStyle(fontSize: 12.5, color: AppColors.muted),
+          style: TextStyle(fontSize: 12.5, color: palette.muted),
         ),
         subtitle: Text(
           value == null ? placeholder : formatDate(value),
           style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w600,
-            color: value == null ? AppColors.muted : AppColors.ink,
+            color: value == null ? palette.muted : palette.ink,
           ),
         ),
         trailing: value != null && onClear != null
@@ -480,7 +487,7 @@ class _DateField extends StatelessWidget {
                 onPressed: onClear,
                 icon: const Icon(Icons.close_rounded, size: 18),
               )
-            : const Icon(Icons.edit_calendar_outlined, color: AppColors.muted),
+            : Icon(Icons.edit_calendar_outlined, color: palette.muted),
       ),
     );
   }
@@ -493,15 +500,16 @@ class _SectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Padding(
       padding: const EdgeInsets.only(top: 20, bottom: 10),
       child: Text(
         text.toUpperCase(),
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 11.5,
           letterSpacing: 1.4,
           fontWeight: FontWeight.w700,
-          color: AppColors.muted,
+          color: palette.muted,
         ),
       ),
     );
@@ -521,10 +529,11 @@ class _LinkRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
-        color: AppColors.lavender,
+        color: palette.soft,
         borderRadius: BorderRadius.circular(16),
         child: ListTile(
           dense: true,
@@ -533,10 +542,10 @@ class _LinkRow extends StatelessWidget {
             borderRadius: BorderRadius.circular(16),
           ),
           onTap: onOpen,
-          leading: const Icon(
+          leading: Icon(
             Icons.open_in_new_rounded,
             size: 18,
-            color: AppColors.amethyst,
+            color: palette.amethyst,
           ),
           title: Text(
             linkLabel(link),
@@ -607,16 +616,17 @@ class _AddImageTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Material(
-      color: Colors.white,
+      color: palette.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: AppColors.line),
+        side: BorderSide(color: palette.line),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
         onTap: onTap,
-        child: const SizedBox.square(
+        child: SizedBox.square(
           dimension: 92,
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -625,7 +635,7 @@ class _AddImageTile extends StatelessWidget {
               SizedBox(height: 4),
               Text(
                 'Galería',
-                style: TextStyle(fontSize: 12, color: AppColors.muted),
+                style: TextStyle(fontSize: 12, color: palette.muted),
               ),
             ],
           ),
