@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/bucket_repository.dart';
 import '../models/bucket_item.dart';
 import '../theme.dart';
+import 'avatar.dart';
 import 'stored_image.dart';
 
 class ItemCard extends StatelessWidget {
@@ -109,11 +110,16 @@ class ItemCard extends StatelessWidget {
 
   List<Widget> _pills(AppPalette palette) {
     final doneAt = item.doneAt;
+    final doneBy = item.doneBy;
     final plannedAt = item.plannedAt;
     return [
       if (item.done)
         _Pill(
           icon: Icons.favorite_rounded,
+          leading: doneBy == null
+              ? null
+              : Avatar(photoUrl: doneBy.photoUrl, name: doneBy.name, size: 16),
+          tooltip: doneBy == null ? null : 'Lo cumplió ${doneBy.shortName}',
           label: doneAt == null ? 'Cumplido' : formatDate(doneAt),
           color: AppColors.done,
         ),
@@ -152,7 +158,8 @@ class _Thumb extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
+    final createdBy = item.createdBy;
+    final thumb = ClipRRect(
       borderRadius: BorderRadius.circular(18),
       child: SizedBox.square(
         dimension: 76,
@@ -160,14 +167,43 @@ class _Thumb extends StatelessWidget {
             ? DecoratedBox(
                 decoration: BoxDecoration(gradient: item.category.gradient),
                 child: Center(
-                  child: Text(
-                    item.category.emoji,
-                    style: const TextStyle(fontSize: 30),
+                  child: Icon(
+                    item.category.icon,
+                    size: 32,
+                    color: Colors.white,
                   ),
                 ),
               )
             : StoredImage(image: imageFor(item.imageIds.first)),
       ),
+    );
+    if (createdBy == null) return thumb;
+
+    // Whoever added the plan, tucked into the corner of the picture.
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        thumb,
+        Positioned(
+          right: -5,
+          bottom: -5,
+          child: Tooltip(
+            message: 'Lo agregó ${createdBy.shortName}',
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                color: context.palette.surface,
+                shape: BoxShape.circle,
+              ),
+              child: Avatar(
+                photoUrl: createdBy.photoUrl,
+                name: createdBy.name,
+                size: 22,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -222,6 +258,8 @@ class _Pill extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.color,
+    this.leading,
+    this.tooltip,
     this.onTap,
   });
 
@@ -230,9 +268,13 @@ class _Pill extends StatelessWidget {
   final Color color;
   final VoidCallback? onTap;
 
+  /// Replaces the icon, e.g. with a person's avatar.
+  final Widget? leading;
+  final String? tooltip;
+
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    final pill = Padding(
       padding: const EdgeInsets.only(right: 6),
       child: Material(
         color: color.withValues(alpha: 0.12),
@@ -245,7 +287,7 @@ class _Pill extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(icon, size: 13, color: color),
+                leading ?? Icon(icon, size: 13, color: color),
                 const SizedBox(width: 4),
                 Text(
                   label,
@@ -261,5 +303,7 @@ class _Pill extends StatelessWidget {
         ),
       ),
     );
+    final tooltip = this.tooltip;
+    return tooltip == null ? pill : Tooltip(message: tooltip, child: pill);
   }
 }

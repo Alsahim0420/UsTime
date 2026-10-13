@@ -210,7 +210,7 @@ class _HomePageState extends State<HomePage> {
                   children: [
                     _CategoryChip(
                       label: 'Todo',
-                      emoji: '✨',
+                      icon: Icons.auto_awesome_rounded,
                       count: _controller.total,
                       selected: _category == null,
                       onTap: () => setState(() => _category = null),
@@ -218,7 +218,7 @@ class _HomePageState extends State<HomePage> {
                     for (final category in BucketCategory.values)
                       _CategoryChip(
                         label: category.label,
-                        emoji: category.emoji,
+                        icon: category.icon,
                         count: _controller.countFor(category),
                         selected: _category == category,
                         onTap: () => setState(() => _category = category),
@@ -402,14 +402,14 @@ class _ProgressCard extends StatelessWidget {
 class _CategoryChip extends StatelessWidget {
   const _CategoryChip({
     required this.label,
-    required this.emoji,
+    required this.icon,
     required this.count,
     required this.selected,
     required this.onTap,
   });
 
   final String label;
-  final String emoji;
+  final IconData icon;
   final int count;
   final bool selected;
   final VoidCallback onTap;
@@ -436,7 +436,7 @@ class _CategoryChip extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               child: Row(
                 children: [
-                  Text(emoji, style: const TextStyle(fontSize: 15)),
+                  Icon(icon, size: 17, color: foreground),
                   const SizedBox(width: 8),
                   Text(
                     label,
@@ -479,7 +479,19 @@ class _EmptyState extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Text('🐼❤️🐻', style: TextStyle(fontSize: 40)),
+          Container(
+            width: 72,
+            height: 72,
+            decoration: const BoxDecoration(
+              gradient: AppColors.hero,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.favorite_rounded,
+              color: Colors.white,
+              size: 34,
+            ),
+          ),
           const SizedBox(height: 16),
           Text(
             filtered ? 'Nada por aquí' : 'Su lista está vacía',

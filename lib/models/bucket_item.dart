@@ -1,15 +1,27 @@
 import 'package:flutter/material.dart';
 
-enum BucketCategory {
-  restaurantes('Restaurantes', '🍔', Color(0xFFFFC9B5), Color(0xFFF7A1B5)),
-  viajes('Viajes', '✈️', Color(0xFFB9CCFA), Color(0xFFC3A6F0)),
-  planes('Planes', '❤️', Color(0xFFF9B4D0), Color(0xFFE39AD8)),
-  series('Series', '🎬', Color(0xFFCDB4F5), Color(0xFF9C8CE8));
+import 'item_event.dart';
 
-  const BucketCategory(this.label, this.emoji, this.colorA, this.colorB);
+enum BucketCategory {
+  restaurantes(
+    'Restaurantes',
+    Icons.restaurant_rounded,
+    Color(0xFFFFC9B5),
+    Color(0xFFF7A1B5),
+  ),
+  viajes('Viajes', Icons.flight_rounded, Color(0xFFB9CCFA), Color(0xFFC3A6F0)),
+  planes(
+    'Planes',
+    Icons.favorite_rounded,
+    Color(0xFFF9B4D0),
+    Color(0xFFE39AD8),
+  ),
+  series('Series', Icons.movie_rounded, Color(0xFFCDB4F5), Color(0xFF9C8CE8));
+
+  const BucketCategory(this.label, this.icon, this.colorA, this.colorB);
 
   final String label;
-  final String emoji;
+  final IconData icon;
   final Color colorA;
   final Color colorB;
 
@@ -38,6 +50,7 @@ class BucketItem {
     this.done = false,
     this.doneAt,
     this.plannedAt,
+    this.history = const [],
   });
 
   final String id;
@@ -54,6 +67,27 @@ class BucketItem {
   final DateTime? plannedAt;
   final DateTime createdAt;
 
+  /// Activity log, oldest first: who created, edited and completed it.
+  final List<ItemEvent> history;
+
+  /// Who added this plan, if known.
+  Actor? get createdBy {
+    for (final event in history) {
+      if (event.type == ItemEventType.created) return event.actor;
+    }
+    return null;
+  }
+
+  /// Who marked it as done, if it is done and that is known.
+  Actor? get doneBy {
+    if (!done) return null;
+    for (final event in history.reversed) {
+      if (event.type == ItemEventType.done) return event.actor;
+      if (event.type == ItemEventType.undone) return null;
+    }
+    return null;
+  }
+
   BucketItem copyWith({
     BucketCategory? category,
     String? title,
@@ -66,6 +100,7 @@ class BucketItem {
     bool clearDoneAt = false,
     DateTime? plannedAt,
     bool clearPlannedAt = false,
+    List<ItemEvent>? history,
   }) {
     return BucketItem(
       id: id,
@@ -79,6 +114,7 @@ class BucketItem {
       done: done ?? this.done,
       doneAt: clearDoneAt ? null : (doneAt ?? this.doneAt),
       plannedAt: clearPlannedAt ? null : (plannedAt ?? this.plannedAt),
+      history: history ?? this.history,
     );
   }
 
@@ -94,6 +130,7 @@ class BucketItem {
     'doneAt': doneAt?.toIso8601String(),
     'plannedAt': plannedAt?.toIso8601String(),
     'createdAt': createdAt.toIso8601String(),
+    'history': [for (final event in history) event.toJson()],
   };
 
   factory BucketItem.fromJson(Map<String, dynamic> json) {
@@ -111,6 +148,10 @@ class BucketItem {
       createdAt:
           DateTime.tryParse(json['createdAt'] as String? ?? '') ??
           DateTime.now(),
+      history: [
+        for (final event in json['history'] as List? ?? const [])
+          ItemEvent.fromJson(Map<String, dynamic>.from(event as Map)),
+      ],
     );
   }
 }
@@ -143,6 +184,11 @@ const _months = [
   'nov',
   'dic',
 ];
+
+/// E.g. `12 oct 2026 · 22:13`.
+String formatDateTime(DateTime date) =>
+    '${formatDate(date)} · ${date.hour.toString().padLeft(2, '0')}:'
+    '${date.minute.toString().padLeft(2, '0')}';
 
 String formatDate(DateTime date) =>
     '${date.day} ${_months[date.month - 1]} ${date.year}';

@@ -6,8 +6,10 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../data/bucket_repository.dart';
 import '../models/bucket_item.dart';
+import '../models/item_event.dart';
 import '../state/bucket_controller.dart';
 import '../theme.dart';
+import 'avatar.dart';
 import 'stored_image.dart';
 
 enum EditorResult { saved, deleteRequested }
@@ -207,6 +209,7 @@ class _ItemEditorState extends State<_ItemEditor> {
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
+    final history = widget.item?.history ?? const <ItemEvent>[];
     return Dialog(
       backgroundColor: palette.canvas,
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
@@ -247,7 +250,14 @@ class _ItemEditorState extends State<_ItemEditor> {
                       children: [
                         for (final category in BucketCategory.values)
                           ChoiceChip(
-                            label: Text('${category.emoji}  ${category.label}'),
+                            avatar: Icon(
+                              category.icon,
+                              size: 18,
+                              color: _category == category
+                                  ? const Color(0xFF3B2F4F)
+                                  : palette.muted,
+                            ),
+                            label: Text(category.label),
                             selected: _category == category,
                             showCheckmark: false,
                             labelStyle: TextStyle(
@@ -387,6 +397,14 @@ class _ItemEditorState extends State<_ItemEditor> {
                         onTap: _pickDoneDate,
                       ),
                     ],
+                    if (history.isNotEmpty) ...[
+                      const _SectionLabel('Actividad'),
+                      for (final event in history.reversed)
+                        _ActivityRow(
+                          event: event,
+                          isMe: event.actor.uid == widget.controller.actor?.uid,
+                        ),
+                    ],
                   ],
                 ),
               ),
@@ -488,6 +506,62 @@ class _DateField extends StatelessWidget {
                 icon: const Icon(Icons.close_rounded, size: 18),
               )
             : Icon(Icons.edit_calendar_outlined, color: palette.muted),
+      ),
+    );
+  }
+}
+
+/// One line of the activity log: who, what, when and what changed.
+class _ActivityRow extends StatelessWidget {
+  const _ActivityRow({required this.event, required this.isMe});
+
+  final ItemEvent event;
+  final bool isMe;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    final actor = event.actor;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Avatar(photoUrl: actor.photoUrl, name: actor.name, size: 30),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(
+                        text: isMe ? 'Tú' : actor.shortName,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      TextSpan(text: ' ${event.type.label}'),
+                    ],
+                  ),
+                  style: const TextStyle(fontSize: 14),
+                ),
+                for (final change in event.changes)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 3),
+                    child: Text(
+                      change,
+                      style: TextStyle(fontSize: 13, color: palette.ink),
+                    ),
+                  ),
+                const SizedBox(height: 2),
+                Text(
+                  formatDateTime(event.at),
+                  style: TextStyle(fontSize: 12, color: palette.muted),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

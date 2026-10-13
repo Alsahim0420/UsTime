@@ -22,14 +22,20 @@ class Avatar extends StatelessWidget {
     final initial = DecoratedBox(
       decoration: const BoxDecoration(gradient: AppColors.hero),
       child: Center(
-        child: Text(
-          name.isEmpty ? '♥' : name.characters.first.toUpperCase(),
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: size * 0.42,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
+        child: name.isEmpty
+            ? Icon(
+                Icons.favorite_rounded,
+                color: Colors.white,
+                size: size * 0.5,
+              )
+            : Text(
+                name.characters.first.toUpperCase(),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: size * 0.42,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
       ),
     );
 

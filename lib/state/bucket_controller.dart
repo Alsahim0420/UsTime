@@ -5,9 +5,18 @@ import 'package:flutter/foundation.dart';
 
 import '../data/bucket_repository.dart';
 import '../models/bucket_item.dart';
+import '../models/item_changes.dart';
+import '../models/item_event.dart';
 
 class BucketController extends ChangeNotifier {
-  BucketController(this._repository);
+  BucketController(this._repository, {this.actor});
+
+  /// Whoever is using the app. When set, every change is signed with it in
+  /// the plan's activity log.
+  final Actor? actor;
+
+  /// How many activity entries a plan keeps (plus the one for its creation).
+  static const _maxHistory = 40;
 
   final BucketRepository _repository;
   final _random = Random();
@@ -80,6 +89,7 @@ class BucketController extends ChangeNotifier {
     }
 
     final index = _items.indexWhere((i) => i.id == item.id);
+    item = _withActivity(index == -1 ? null : _items[index], item);
     if (index == -1) {
       _items.add(item);
     } else {
@@ -90,6 +100,42 @@ class BucketController extends ChangeNotifier {
 
     await _repository.saveItem(item);
     await _deleteImages(removedImageIds);
+  }
+
+  /// Appends to [item]'s activity log what the current [actor] just did,
+  /// by comparing it with the stored version ([before]).
+  BucketItem _withActivity(BucketItem? before, BucketItem item) {
+    final actor = this.actor;
+    if (actor == null) return item;
+    // A deleted plan being restored: its log is already complete.
+    if (before == null && item.history.isNotEmpty) return item;
+
+    final now = DateTime.now();
+    ItemEvent event(ItemEventType type, [List<String> changes = const []]) =>
+        ItemEvent(type: type, actor: actor, at: now, changes: changes);
+
+    final added = <ItemEvent>[];
+    if (before == null) {
+      added.add(event(ItemEventType.created));
+      if (item.done) added.add(event(ItemEventType.done));
+    } else {
+      final changes = describeChanges(before, item);
+      if (changes.isNotEmpty) added.add(event(ItemEventType.edited, changes));
+      if (before.done != item.done) {
+        added.add(event(item.done ? ItemEventType.done : ItemEventType.undone));
+      }
+    }
+    // Always build on the stored log, never on the caller's copy, which may
+    // be older than what someone else just saved.
+    var history = [...?before?.history, ...added];
+    if (history.length > _maxHistory + 1) {
+      // Keep the first entry (creation) and the most recent ones.
+      history = [
+        history.first,
+        ...history.sublist(history.length - _maxHistory),
+      ];
+    }
+    return item.copyWith(history: history);
   }
 
   Future<void> toggleDone(BucketItem item) {

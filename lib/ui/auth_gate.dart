@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../data/firebase_bucket_repository.dart';
 import '../data/spaces_repository.dart';
+import '../models/item_event.dart';
 import '../models/space.dart';
 import '../state/account_controller.dart';
 import '../state/bucket_controller.dart';
@@ -15,16 +18,43 @@ import 'space_dialogs.dart';
 
 /// Shows the sign-in screen until someone signs in with Google, then their
 /// active shared list.
-class AuthGate extends StatelessWidget {
+class AuthGate extends StatefulWidget {
   const AuthGate({super.key, required this.themeMode});
 
   /// Updated with the signed-in user's theme setting.
   final ValueNotifier<ThemeMode> themeMode;
 
   @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  // Created once: this widget rebuilds whenever the theme changes, and a new
+  // stream on each build would restart the session every time.
+  final _users = FirebaseAuth.instance.userChanges();
+  late final StreamSubscription<User?> _signOutSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    // The next person on this device starts with the system theme.
+    _signOutSubscription = FirebaseAuth.instance.authStateChanges().listen((
+      user,
+    ) {
+      if (user == null) widget.themeMode.value = ThemeMode.system;
+    });
+  }
+
+  @override
+  void dispose() {
+    _signOutSubscription.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.userChanges(),
+      stream: _users,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Backdrop(child: CircularProgressIndicator());
@@ -34,7 +64,7 @@ class AuthGate extends StatelessWidget {
         return _Session(
           key: ValueKey(user.uid),
           user: user,
-          themeMode: themeMode,
+          themeMode: widget.themeMode,
         );
       },
     );
@@ -68,10 +98,6 @@ class _SessionState extends State<_Session> {
   @override
   void dispose() {
     _account.dispose();
-    // The next person on this device starts with the system theme. Deferred
-    // because the app can't rebuild while this widget is being removed.
-    final themeMode = widget.themeMode;
-    Future.microtask(() => themeMode.value = ThemeMode.system);
     super.dispose();
   }
 
@@ -100,6 +126,11 @@ class _SessionState extends State<_Session> {
         return _SpaceView(
           key: ValueKey(space.id),
           space: space,
+          actor: Actor(
+            uid: user.uid,
+            name: user.displayName,
+            photoUrl: user.photoURL,
+          ),
           trailing: Tooltip(
             message: 'Perfil',
             child: InkResponse(
@@ -120,9 +151,15 @@ class _SessionState extends State<_Session> {
 
 /// Shows the items of one shared list.
 class _SpaceView extends StatefulWidget {
-  const _SpaceView({super.key, required this.space, required this.trailing});
+  const _SpaceView({
+    super.key,
+    required this.space,
+    required this.actor,
+    required this.trailing,
+  });
 
   final Space space;
+  final Actor actor;
   final Widget trailing;
 
   @override
@@ -132,6 +169,7 @@ class _SpaceView extends StatefulWidget {
 class _SpaceViewState extends State<_SpaceView> {
   late final _controller = BucketController(
     FirebaseBucketRepository(widget.space.id),
+    actor: widget.actor,
   )..load();
 
   @override
