@@ -1,5 +1,5 @@
-# Netlify builds and deploys on every push/merge to the production branch
-# (main). Pull requests get a deploy preview built the same way.
+# Netlify builds and deploys only on pushes/merges to the production branch
+# (main). Pull request previews and other branches are skipped below.
 [build]
   command = "bash tool/netlify_build.sh"
   publish = "build/web"
@@ -7,6 +7,13 @@
 [build.environment]
   # Keep in sync with the Flutter version used locally (`flutter --version`).
   FLUTTER_VERSION = "3.47.4"
+
+# An `ignore` command that exits 0 cancels the build for that context.
+[context.deploy-preview]
+  ignore = "exit 0"
+
+[context.branch-deploy]
+  ignore = "exit 0"
 
 # Flutter web is a single-page app: every path is served by index.html.
 [[redirects]]
