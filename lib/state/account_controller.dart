@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../data/spaces_repository.dart';
+import '../models/category.dart';
 import '../models/space.dart';
 
 /// The signed-in user's lists and settings.
@@ -54,7 +55,11 @@ class AccountController extends ChangeNotifier {
     }, onError: fail);
   }
 
-  Future<void> createSpace(String name) => _repository.createSpace(uid, name);
+  Future<void> createSpace(String name, List<Category> categories) =>
+      _repository.createSpace(uid, name, categories);
+
+  Future<void> saveCategories(Space space, List<Category> categories) =>
+      _repository.saveCategories(space.id, categories);
 
   /// Throws [SpaceNotFound] if no list has that code.
   Future<void> joinSpace(String code) => _repository.joinSpace(uid, code);

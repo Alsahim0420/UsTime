@@ -37,7 +37,9 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final _search = TextEditingController();
-  BucketCategory? _category;
+
+  /// Id of the category being filtered by, if any.
+  String? _category;
   _Status _status = _Status.all;
 
   BucketController get _controller => widget.controller;
@@ -48,10 +50,15 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
+  /// [_category], unless that category has since been deleted.
+  String? get _activeCategory =>
+      _controller.categories.any((c) => c.id == _category) ? _category : null;
+
   List<BucketItem> get _visibleItems {
     final query = _search.text.trim().toLowerCase();
+    final category = _activeCategory;
     return _controller.items.where((item) {
-      if (_category != null && item.category != _category) return false;
+      if (category != null && item.category != category) return false;
       if (_status == _Status.pending && item.done) return false;
       if (_status == _Status.done && !item.done) return false;
       if (query.isEmpty) return true;
@@ -66,7 +73,7 @@ class _HomePageState extends State<HomePage> {
       context,
       controller: _controller,
       item: item,
-      initialCategory: _category,
+      initialCategory: _activeCategory,
     );
     if (result == EditorResult.deleteRequested && item != null) {
       await _delete(item);
@@ -212,16 +219,16 @@ class _HomePageState extends State<HomePage> {
                       label: 'Todo',
                       icon: Icons.auto_awesome_rounded,
                       count: _controller.total,
-                      selected: _category == null,
+                      selected: _activeCategory == null,
                       onTap: () => setState(() => _category = null),
                     ),
-                    for (final category in BucketCategory.values)
+                    for (final category in _controller.categories)
                       _CategoryChip(
-                        label: category.label,
+                        label: category.name,
                         icon: category.icon,
-                        count: _controller.countFor(category),
-                        selected: _category == category,
-                        onTap: () => setState(() => _category = category),
+                        count: _controller.countFor(category.id),
+                        selected: _activeCategory == category.id,
+                        onTap: () => setState(() => _category = category.id),
                       ),
                   ],
                 ),
@@ -251,6 +258,7 @@ class _HomePageState extends State<HomePage> {
                     return ItemCard(
                       key: ValueKey(item.id),
                       item: item,
+                      category: _controller.categoryFor(item.category),
                       imageFor: _controller.image,
                       onTap: () => _openEditor(item),
                       onToggleDone: () => _guard(_controller.toggleDone(item)),

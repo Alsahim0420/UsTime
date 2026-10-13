@@ -1,4 +1,6 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -10,6 +12,11 @@ import 'ui/auth_gate.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  if (kIsWeb) {
+    // Keep the session in this browser until the person signs out, even
+    // after closing the tab or restarting the computer.
+    await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
+  }
   await _preloadFonts();
   runApp(const UsTimeApp());
 }

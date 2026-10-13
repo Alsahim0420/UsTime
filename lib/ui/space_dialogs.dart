@@ -2,31 +2,139 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../data/spaces_repository.dart';
+import '../models/category.dart';
 import '../state/account_controller.dart';
 import '../theme.dart';
+import 'category_editor.dart';
 
-/// Asks for a name and creates a new shared list.
+/// Asks for a name and the starting categories, and creates a shared list.
 Future<void> showCreateSpaceDialog(
   BuildContext context,
   AccountController account,
 ) {
   return showDialog<void>(
     context: context,
-    builder: (context) => _SpaceDialog(
-      title: 'Nueva lista',
-      description:
-          'Le crearemos un código de 6 dígitos para que invites a tu pareja '
-          'o a tus amigos.',
-      label: 'Nombre de la lista',
-      hint: 'Nuestra lista',
-      action: 'Crear',
-      onSubmit: (value) async {
-        if (value.isEmpty) return 'Ponle un nombre';
-        await account.createSpace(value);
-        return null;
-      },
-    ),
+    builder: (context) => _CreateSpaceDialog(account: account),
   );
+}
+
+class _CreateSpaceDialog extends StatefulWidget {
+  const _CreateSpaceDialog({required this.account});
+
+  final AccountController account;
+
+  @override
+  State<_CreateSpaceDialog> createState() => _CreateSpaceDialogState();
+}
+
+class _CreateSpaceDialogState extends State<_CreateSpaceDialog> {
+  final _name = TextEditingController();
+  List<Category> _categories = Category.defaults;
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_busy) return;
+    final name = _name.text.trim();
+    if (name.isEmpty) {
+      setState(() => _error = 'Ponle un nombre');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await widget.account.createSpace(name, _categories);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _error = 'No se pudo crear. Revisa tu conexión.';
+      });
+      return;
+    }
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    return Dialog(
+      backgroundColor: palette.canvas,
+      insetPadding: const EdgeInsets.all(16),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Nueva lista', style: displayStyle(size: 24)),
+              const SizedBox(height: 8),
+              Text(
+                'Le crearemos un código de 6 dígitos para que invites a tu '
+                'pareja o a tus amigos.',
+                style: TextStyle(color: palette.muted),
+              ),
+              const SizedBox(height: 20),
+              TextField(
+                controller: _name,
+                autofocus: true,
+                textCapitalization: TextCapitalization.sentences,
+                inputFormatters: [LengthLimitingTextInputFormatter(40)],
+                decoration: InputDecoration(
+                  labelText: 'Nombre de la lista',
+                  hintText: 'Nuestra lista',
+                  errorText: _error,
+                ),
+              ),
+              const SizedBox(height: 22),
+              const Text(
+                'Categorías',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Deja las que te sirvan, quita las que no y agrega las tuyas. '
+                'Después las puedes cambiar en Ajustes.',
+                style: TextStyle(fontSize: 13, color: palette.muted),
+              ),
+              const SizedBox(height: 12),
+              CategoryListEditor(
+                categories: _categories,
+                onChanged: (categories) =>
+                    setState(() => _categories = categories),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Cancelar'),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    onPressed: _busy ? null : _submit,
+                    child: const Text('Crear'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// Asks for a 6-digit code and joins that list.

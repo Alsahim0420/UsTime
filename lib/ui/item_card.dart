@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/bucket_repository.dart';
 import '../models/bucket_item.dart';
+import '../models/category.dart';
 import '../theme.dart';
 import 'avatar.dart';
 import 'stored_image.dart';
@@ -10,6 +11,7 @@ class ItemCard extends StatelessWidget {
   const ItemCard({
     super.key,
     required this.item,
+    required this.category,
     required this.imageFor,
     required this.onTap,
     required this.onToggleDone,
@@ -17,6 +19,7 @@ class ItemCard extends StatelessWidget {
   });
 
   final BucketItem item;
+  final Category category;
   final Future<ImageData?> Function(String id) imageFor;
   final VoidCallback onTap;
   final VoidCallback onToggleDone;
@@ -48,7 +51,7 @@ class ItemCard extends StatelessWidget {
               padding: const EdgeInsets.all(14),
               child: Row(
                 children: [
-                  _Thumb(item: item, imageFor: imageFor),
+                  _Thumb(item: item, category: category, imageFor: imageFor),
                   const SizedBox(width: 14),
                   Expanded(
                     child: Column(
@@ -151,9 +154,14 @@ class ItemCard extends StatelessWidget {
 }
 
 class _Thumb extends StatelessWidget {
-  const _Thumb({required this.item, required this.imageFor});
+  const _Thumb({
+    required this.item,
+    required this.category,
+    required this.imageFor,
+  });
 
   final BucketItem item;
+  final Category category;
   final Future<ImageData?> Function(String id) imageFor;
 
   @override
@@ -165,13 +173,9 @@ class _Thumb extends StatelessWidget {
         dimension: 76,
         child: item.imageIds.isEmpty
             ? DecoratedBox(
-                decoration: BoxDecoration(gradient: item.category.gradient),
+                decoration: BoxDecoration(gradient: category.gradient),
                 child: Center(
-                  child: Icon(
-                    item.category.icon,
-                    size: 32,
-                    color: Colors.white,
-                  ),
+                  child: Icon(category.icon, size: 32, color: Colors.white),
                 ),
               )
             : StoredImage(image: imageFor(item.imageIds.first)),

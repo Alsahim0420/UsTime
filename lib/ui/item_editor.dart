@@ -26,7 +26,7 @@ Future<EditorResult?> showItemEditor(
   BuildContext context, {
   required BucketController controller,
   BucketItem? item,
-  BucketCategory? initialCategory,
+  String? initialCategory,
 }) {
   return showDialog<EditorResult>(
     context: context,
@@ -34,7 +34,7 @@ Future<EditorResult?> showItemEditor(
     builder: (context) => _ItemEditor(
       controller: controller,
       item: item,
-      initialCategory: initialCategory ?? BucketCategory.restaurantes,
+      initialCategory: initialCategory,
     ),
   );
 }
@@ -48,7 +48,9 @@ class _ItemEditor extends StatefulWidget {
 
   final BucketController controller;
   final BucketItem? item;
-  final BucketCategory initialCategory;
+
+  /// Category id preselected for a new plan.
+  final String? initialCategory;
 
   @override
   State<_ItemEditor> createState() => _ItemEditorState();
@@ -60,8 +62,12 @@ class _ItemEditorState extends State<_ItemEditor> {
   late final _location = TextEditingController(text: widget.item?.location);
   final _link = TextEditingController();
 
-  late BucketCategory _category =
-      widget.item?.category ?? widget.initialCategory;
+  late String _category =
+      widget.item?.category ??
+      widget.initialCategory ??
+      (widget.controller.categories.isEmpty
+          ? ''
+          : widget.controller.categories.first.id);
   late bool _done = widget.item?.done ?? false;
   late DateTime? _doneAt = widget.item?.doneAt;
   late DateTime? _plannedAt = widget.item?.plannedAt;
@@ -210,6 +216,7 @@ class _ItemEditorState extends State<_ItemEditor> {
   Widget build(BuildContext context) {
     final palette = context.palette;
     final history = widget.item?.history ?? const <ItemEvent>[];
+    final categories = widget.controller.categories;
     return Dialog(
       backgroundColor: palette.canvas,
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
@@ -248,33 +255,33 @@ class _ItemEditorState extends State<_ItemEditor> {
                       spacing: 8,
                       runSpacing: 8,
                       children: [
-                        for (final category in BucketCategory.values)
+                        for (final category in categories)
                           ChoiceChip(
                             avatar: Icon(
                               category.icon,
                               size: 18,
-                              color: _category == category
+                              color: _category == category.id
                                   ? const Color(0xFF3B2F4F)
                                   : palette.muted,
                             ),
-                            label: Text(category.label),
-                            selected: _category == category,
+                            label: Text(category.name),
+                            selected: _category == category.id,
                             showCheckmark: false,
                             labelStyle: TextStyle(
-                              color: _category == category
+                              color: _category == category.id
                                   ? const Color(0xFF3B2F4F)
                                   : palette.ink,
                             ),
                             backgroundColor: palette.surface,
                             selectedColor: category.colorA,
                             side: BorderSide(
-                              color: _category == category
+                              color: _category == category.id
                                   ? category.colorB
                                   : palette.line,
                             ),
                             shape: const StadiumBorder(),
                             onSelected: (_) =>
-                                setState(() => _category = category),
+                                setState(() => _category = category.id),
                           ),
                       ],
                     ),

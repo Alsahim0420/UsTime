@@ -2,8 +2,12 @@ import 'bucket_item.dart';
 
 /// Describes what an edit changed between [before] and [after], one readable
 /// line per field. Marking as done/pending is not included; it gets its own
-/// entry in the activity log.
-List<String> describeChanges(BucketItem before, BucketItem after) {
+/// entry in the activity log. [categoryName] turns a category id into its name.
+List<String> describeChanges(
+  BucketItem before,
+  BucketItem after, {
+  String Function(String categoryId)? categoryName,
+}) {
   String quote(String value) {
     if (value.isEmpty) return 'vacío';
     return '«${value.length > 60 ? '${value.substring(0, 60)}…' : value}»';
@@ -35,8 +39,9 @@ List<String> describeChanges(BucketItem before, BucketItem after) {
 
   text('Nombre', before.title, after.title);
   if (before.category != after.category) {
+    final name = categoryName ?? (id) => id;
     changes.add(
-      'Categoría: ${before.category.label} → ${after.category.label}',
+      'Categoría: ${name(before.category)} → ${name(after.category)}',
     );
   }
   text('Nota', before.note, after.note);

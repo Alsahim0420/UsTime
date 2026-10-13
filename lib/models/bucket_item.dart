@@ -1,41 +1,4 @@
-import 'package:flutter/material.dart';
-
 import 'item_event.dart';
-
-enum BucketCategory {
-  restaurantes(
-    'Restaurantes',
-    Icons.restaurant_rounded,
-    Color(0xFFFFC9B5),
-    Color(0xFFF7A1B5),
-  ),
-  viajes('Viajes', Icons.flight_rounded, Color(0xFFB9CCFA), Color(0xFFC3A6F0)),
-  planes(
-    'Planes',
-    Icons.favorite_rounded,
-    Color(0xFFF9B4D0),
-    Color(0xFFE39AD8),
-  ),
-  series('Series', Icons.movie_rounded, Color(0xFFCDB4F5), Color(0xFF9C8CE8));
-
-  const BucketCategory(this.label, this.icon, this.colorA, this.colorB);
-
-  final String label;
-  final IconData icon;
-  final Color colorA;
-  final Color colorB;
-
-  LinearGradient get gradient => LinearGradient(
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-    colors: [colorA, colorB],
-  );
-
-  static BucketCategory fromName(String? name) => values.firstWhere(
-    (c) => c.name == name,
-    orElse: () => BucketCategory.planes,
-  );
-}
 
 class BucketItem {
   const BucketItem({
@@ -54,7 +17,9 @@ class BucketItem {
   });
 
   final String id;
-  final BucketCategory category;
+
+  /// Id of its category in the list; see `Category`.
+  final String category;
   final String title;
   final String note;
   final String location;
@@ -89,7 +54,7 @@ class BucketItem {
   }
 
   BucketItem copyWith({
-    BucketCategory? category,
+    String? category,
     String? title,
     String? note,
     String? location,
@@ -120,7 +85,7 @@ class BucketItem {
 
   Map<String, dynamic> toJson() => {
     'id': id,
-    'category': category.name,
+    'category': category,
     'title': title,
     'note': note,
     'location': location,
@@ -136,7 +101,7 @@ class BucketItem {
   factory BucketItem.fromJson(Map<String, dynamic> json) {
     return BucketItem(
       id: json['id'] as String,
-      category: BucketCategory.fromName(json['category'] as String?),
+      category: json['category'] as String? ?? '',
       title: json['title'] as String? ?? '',
       note: json['note'] as String? ?? '',
       location: json['location'] as String? ?? '',

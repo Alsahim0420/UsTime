@@ -1,10 +1,11 @@
 import 'dart:async';
 import 'dart:math';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' hide Category;
 
 import '../data/bucket_repository.dart';
 import '../models/bucket_item.dart';
+import '../models/category.dart';
 import '../models/item_changes.dart';
 import '../models/item_event.dart';
 
@@ -38,8 +39,15 @@ class BucketController extends ChangeNotifier {
   int get total => _items.length;
   int get doneCount => _items.where((i) => i.done).length;
 
-  int countFor(BucketCategory category) =>
-      _items.where((i) => i.category == category).length;
+  /// The list's categories. Kept up to date by whoever owns this controller;
+  /// changing it doesn't notify listeners.
+  List<Category> categories = Category.defaults;
+
+  Category categoryFor(String id) =>
+      categories.firstWhere((c) => c.id == id, orElse: () => Category.none);
+
+  int countFor(String categoryId) =>
+      _items.where((i) => i.category == categoryId).length;
 
   /// Starts listening to the shared list. Completes once the first result
   /// (or error) arrives; later changes by anyone keep updating [items].
@@ -119,7 +127,11 @@ class BucketController extends ChangeNotifier {
       added.add(event(ItemEventType.created));
       if (item.done) added.add(event(ItemEventType.done));
     } else {
-      final changes = describeChanges(before, item);
+      final changes = describeChanges(
+        before,
+        item,
+        categoryName: (id) => categoryFor(id).name,
+      );
       if (changes.isNotEmpty) added.add(event(ItemEventType.edited, changes));
       if (before.done != item.done) {
         added.add(event(item.done ? ItemEventType.done : ItemEventType.undone));

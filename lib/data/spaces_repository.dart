@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../models/category.dart';
 import '../models/space.dart';
 
 /// Thrown when nobody has a list with the given code.
@@ -66,7 +67,11 @@ class SpacesRepository {
 
   /// Creates a list with a fresh unique code and makes it the active one.
   /// Returns the new list's id.
-  Future<String> createSpace(String uid, String name) async {
+  Future<String> createSpace(
+    String uid,
+    String name,
+    List<Category> categories,
+  ) async {
     final spaceRef = _spaces.doc();
     for (var attempt = 0; attempt < 20; attempt++) {
       final code = '${100000 + _random.nextInt(900000)}';
@@ -80,6 +85,7 @@ class SpacesRepository {
           'code': code,
           'ownerUid': uid,
           'members': [uid],
+          'categories': [for (final c in categories) c.toJson()],
           'createdAt': FieldValue.serverTimestamp(),
         });
         return true;
@@ -104,6 +110,13 @@ class SpacesRepository {
     });
     await setActiveSpace(uid, spaceId);
     return spaceId;
+  }
+
+  /// Replaces the list's categories for all its members.
+  Future<void> saveCategories(String spaceId, List<Category> categories) {
+    return _spaces.doc(spaceId).update({
+      'categories': [for (final c in categories) c.toJson()],
+    });
   }
 
   Future<void> setActiveSpace(String uid, String spaceId) =>

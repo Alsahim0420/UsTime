@@ -167,10 +167,20 @@ class _SpaceView extends StatefulWidget {
 }
 
 class _SpaceViewState extends State<_SpaceView> {
-  late final _controller = BucketController(
-    FirebaseBucketRepository(widget.space.id),
-    actor: widget.actor,
-  )..load();
+  late final _controller =
+      BucketController(
+          FirebaseBucketRepository(widget.space.id),
+          actor: widget.actor,
+        )
+        ..categories = widget.space.categories
+        ..load();
+
+  @override
+  void didUpdateWidget(_SpaceView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Picked up by the HomePage built right after this.
+    _controller.categories = widget.space.categories;
+  }
 
   @override
   void dispose() {

@@ -36,7 +36,7 @@ void main() {
   test('items survive a JSON round trip', () {
     final item = BucketItem(
       id: 'a',
-      category: BucketCategory.viajes,
+      category: 'viajes',
       title: 'Grecia',
       note: 'Verano',
       location: 'Atenas',

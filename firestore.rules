@@ -39,13 +39,15 @@ service cloud.firestore {
         && request.resource.data.name.size() <= 40
         && getAfter(/databases/$(database)/documents/codes/$(request.resource.data.code)).data.spaceId == spaceId;
 
-      // Members can rename it. Anyone who got the list's id through its code
+      // Members can rename it and change its categories. Anyone who got the list's id through its code
       // can add themselves (and only themselves) as a member.
       allow update: if signedIn() && (
         (request.auth.uid in resource.data.members
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name'])
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'categories'])
           && request.resource.data.name is string
-          && request.resource.data.name.size() <= 40)
+          && request.resource.data.name.size() <= 40
+          && request.resource.data.get('categories', []) is list
+          && request.resource.data.get('categories', []).size() <= 40)
         || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members'])
           && request.resource.data.members.size() == resource.data.members.size() + 1
           && request.resource.data.members.size() <= 30
