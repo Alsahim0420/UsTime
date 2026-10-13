@@ -5,17 +5,18 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:ustime/data/bucket_repository.dart';
-import 'package:ustime/data/seed_data.dart';
 import 'package:ustime/models/bucket_item.dart';
 import 'package:ustime/state/bucket_controller.dart';
 import 'package:ustime/theme.dart';
 import 'package:ustime/ui/home_page.dart';
 
-class _SeededRepository implements BucketRepository {
-  final items = {for (final item in buildSeedItems()) item.id: item};
+import 'sample_items.dart';
+
+class _SampleRepository implements BucketRepository {
+  final items = {for (final item in sampleItems()) item.id: item};
 
   @override
-  Future<List<BucketItem>> loadItems() async => items.values.toList();
+  Stream<List<BucketItem>> watchItems() => Stream.value(items.values.toList());
   @override
   Future<void> saveItem(BucketItem item) async => items[item.id] = item;
   @override
@@ -23,7 +24,7 @@ class _SeededRepository implements BucketRepository {
   @override
   Future<void> saveImage(String id, Uint8List bytes) async {}
   @override
-  Future<Uint8List?> loadImage(String id) async => null;
+  Future<ImageData?> loadImage(String id) async => null;
   @override
   Future<void> deleteImage(String id) async {}
 }
@@ -39,12 +40,12 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
 
-      final controller = BucketController(_SeededRepository());
+      final controller = BucketController(_SampleRepository());
       await controller.load();
       final total = controller.total;
       await tester.pumpWidget(
         MaterialApp(
-          theme: buildTheme(),
+          theme: buildTheme(Brightness.light),
           locale: const Locale('es'),
           supportedLocales: const [Locale('es')],
           localizationsDelegates: GlobalMaterialLocalizations.delegates,
@@ -106,7 +107,12 @@ void main() {
       await tester.ensureVisible(find.text('¿Cuándo lo hicimos?'));
       await tester.tap(find.text('¿Cuándo lo hicimos?'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('1'));
+      await tester.tap(
+        find.descendant(
+          of: find.byType(DatePickerDialog),
+          matching: find.text('1'),
+        ),
+      );
       await tester.tap(find.text(ok));
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(FilledButton, 'Guardar'));

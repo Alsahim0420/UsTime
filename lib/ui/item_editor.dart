@@ -1,12 +1,17 @@
 import 'dart:typed_data';
 
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../data/bucket_repository.dart';
+import '../data/image_compressor.dart';
 import '../models/bucket_item.dart';
+import '../models/item_event.dart';
 import '../state/bucket_controller.dart';
 import '../theme.dart';
+import 'avatar.dart';
 import 'stored_image.dart';
 
 enum EditorResult { saved, deleteRequested }
@@ -23,15 +28,15 @@ Future<EditorResult?> showItemEditor(
   BuildContext context, {
   required BucketController controller,
   BucketItem? item,
-  BucketCategory? initialCategory,
+  String? initialCategory,
 }) {
   return showDialog<EditorResult>(
     context: context,
-    barrierColor: AppColors.ink.withValues(alpha: 0.35),
+    barrierColor: const Color(0x733B2F4F),
     builder: (context) => _ItemEditor(
       controller: controller,
       item: item,
-      initialCategory: initialCategory ?? BucketCategory.restaurantes,
+      initialCategory: initialCategory,
     ),
   );
 }
@@ -45,7 +50,9 @@ class _ItemEditor extends StatefulWidget {
 
   final BucketController controller;
   final BucketItem? item;
-  final BucketCategory initialCategory;
+
+  /// Category id preselected for a new plan.
+  final String? initialCategory;
 
   @override
   State<_ItemEditor> createState() => _ItemEditorState();
@@ -57,8 +64,12 @@ class _ItemEditorState extends State<_ItemEditor> {
   late final _location = TextEditingController(text: widget.item?.location);
   final _link = TextEditingController();
 
-  late BucketCategory _category =
-      widget.item?.category ?? widget.initialCategory;
+  late String _category =
+      widget.item?.category ??
+      widget.initialCategory ??
+      (widget.controller.categories.isEmpty
+          ? ''
+          : widget.controller.categories.first.id);
   late bool _done = widget.item?.done ?? false;
   late DateTime? _doneAt = widget.item?.doneAt;
   late DateTime? _plannedAt = widget.item?.plannedAt;
@@ -71,6 +82,9 @@ class _ItemEditorState extends State<_ItemEditor> {
 
   bool _titleMissing = false;
   bool _saving = false;
+  String? _saveError;
+  bool _preparingImages = false;
+  String? _imageError;
 
   bool get _isNew => widget.item == null;
 
@@ -124,15 +138,41 @@ class _ItemEditorState extends State<_ItemEditor> {
       maxHeight: 1600,
       imageQuality: 82,
     );
-    if (files.isEmpty) return;
-    final picked = <String, Uint8List>{
-      for (final file in files)
-        widget.controller.newId(): await file.readAsBytes(),
-    };
+    if (files.isEmpty || !mounted) return;
+    setState(() {
+      _preparingImages = true;
+      _imageError = null;
+    });
+    // Let the "preparing" state paint before the heavy work starts.
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+
+    final picked = <String, Uint8List>{};
+    var unreadable = 0;
+    for (final file in files) {
+      Uint8List? compressed;
+      try {
+        compressed = compressImage(await file.readAsBytes());
+      } catch (_) {
+        compressed = null;
+      }
+      if (compressed == null) {
+        unreadable++;
+      } else {
+        picked[widget.controller.newId()] = compressed;
+      }
+      // Yield between photos so the page stays responsive.
+      await Future<void>.delayed(Duration.zero);
+    }
     if (!mounted) return;
     setState(() {
+      _preparingImages = false;
       _newImages.addAll(picked);
       _imageIds.addAll(picked.keys);
+      if (unreadable > 0) {
+        _imageError = unreadable == 1
+            ? 'No se pudo leer una de las fotos.'
+            : 'No se pudieron leer $unreadable fotos.';
+      }
     });
   }
 
@@ -143,9 +183,11 @@ class _ItemEditorState extends State<_ItemEditor> {
     });
   }
 
-  Future<Uint8List?> _imageBytes(String id) {
+  Future<ImageData?> _image(String id) {
     final fresh = _newImages[id];
-    return fresh != null ? Future.value(fresh) : widget.controller.image(id);
+    return fresh != null
+        ? Future.value(ImageData.bytes(fresh))
+        : widget.controller.image(id);
   }
 
   Future<void> _save() async {
@@ -155,7 +197,10 @@ class _ItemEditorState extends State<_ItemEditor> {
       return;
     }
     _addLink();
-    setState(() => _saving = true);
+    setState(() {
+      _saving = true;
+      _saveError = null;
+    });
 
     final existing = widget.item;
     final base =
@@ -180,18 +225,48 @@ class _ItemEditorState extends State<_ItemEditor> {
       clearPlannedAt: _plannedAt == null,
     );
 
-    await widget.controller.save(
-      item,
-      newImages: _newImages,
-      removedImageIds: _removedImageIds,
-    );
+    try {
+      await widget.controller.save(
+        item,
+        newImages: _newImages,
+        removedImageIds: _removedImageIds,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _saveError = _describeSaveError(error);
+      });
+      return;
+    }
     if (mounted) Navigator.of(context).pop(EditorResult.saved);
+  }
+
+  /// Explains a failed save, keeping the service's error code visible so it
+  /// can be reported.
+  String _describeSaveError(Object error) {
+    if (error is! FirebaseException) {
+      return 'No se pudo guardar. Intenta de nuevo.';
+    }
+    final where = error.plugin == 'firebase_storage' ? 'las fotos' : 'el plan';
+    return switch (error.code) {
+      'unauthorized' || 'permission-denied' =>
+        'No hay permiso para guardar $where (${error.code}).',
+      'unavailable' ||
+      'retry-limit-exceeded' ||
+      'network-request-failed' => 'No se pudo guardar. Revisa tu conexión.',
+      _ => 'No se pudo guardar $where (${error.code}).',
+    };
   }
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
+    final saveError = _saveError;
+    final history = widget.item?.history ?? const <ItemEvent>[];
+    final categories = widget.controller.categories;
     return Dialog(
-      backgroundColor: AppColors.blush,
+      backgroundColor: palette.canvas,
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
       clipBehavior: Clip.antiAlias,
@@ -228,21 +303,33 @@ class _ItemEditorState extends State<_ItemEditor> {
                       spacing: 8,
                       runSpacing: 8,
                       children: [
-                        for (final category in BucketCategory.values)
+                        for (final category in categories)
                           ChoiceChip(
-                            label: Text('${category.emoji}  ${category.label}'),
-                            selected: _category == category,
+                            avatar: Icon(
+                              category.icon,
+                              size: 18,
+                              color: _category == category.id
+                                  ? const Color(0xFF3B2F4F)
+                                  : palette.muted,
+                            ),
+                            label: Text(category.name),
+                            selected: _category == category.id,
                             showCheckmark: false,
-                            backgroundColor: Colors.white,
+                            labelStyle: TextStyle(
+                              color: _category == category.id
+                                  ? const Color(0xFF3B2F4F)
+                                  : palette.ink,
+                            ),
+                            backgroundColor: palette.surface,
                             selectedColor: category.colorA,
                             side: BorderSide(
-                              color: _category == category
+                              color: _category == category.id
                                   ? category.colorB
-                                  : AppColors.line,
+                                  : palette.line,
                             ),
                             shape: const StadiumBorder(),
                             onSelected: (_) =>
-                                setState(() => _category = category),
+                                setState(() => _category = category.id),
                           ),
                       ],
                     ),
@@ -309,7 +396,7 @@ class _ItemEditorState extends State<_ItemEditor> {
                           tooltip: 'Agregar link',
                           onPressed: _addLink,
                           icon: const Icon(Icons.add_circle_rounded),
-                          color: AppColors.amethyst,
+                          color: palette.amethyst,
                         ),
                       ),
                       onSubmitted: (_) => _addLink(),
@@ -321,18 +408,33 @@ class _ItemEditorState extends State<_ItemEditor> {
                       children: [
                         for (final id in _imageIds)
                           _ImageTile(
-                            bytes: _imageBytes(id),
+                            image: _image(id),
                             onRemove: () => _removeImage(id),
                           ),
-                        _AddImageTile(onTap: _pickImages),
+                        _AddImageTile(
+                          busy: _preparingImages,
+                          onTap: _pickImages,
+                        ),
                       ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _imageError ??
+                          'Opcional. Las fotos se reducen a 300 KB como '
+                              'máximo para que carguen rápido.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: _imageError == null
+                            ? palette.muted
+                            : AppColors.danger,
+                      ),
                     ),
                     const SizedBox(height: 18),
                     Material(
-                      color: Colors.white,
+                      color: palette.surface,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
-                        side: const BorderSide(color: AppColors.line),
+                        side: BorderSide(color: palette.line),
                       ),
                       child: SwitchListTile(
                         value: _done,
@@ -365,6 +467,14 @@ class _ItemEditorState extends State<_ItemEditor> {
                         onTap: _pickDoneDate,
                       ),
                     ],
+                    if (history.isNotEmpty) ...[
+                      const _SectionLabel('Actividad'),
+                      for (final event in history.reversed)
+                        _ActivityRow(
+                          event: event,
+                          isMe: event.actor.uid == widget.controller.actor?.uid,
+                        ),
+                    ],
                   ],
                 ),
               ),
@@ -381,12 +491,26 @@ class _ItemEditorState extends State<_ItemEditor> {
                       icon: const Icon(Icons.delete_outline_rounded),
                       label: const Text('Eliminar'),
                       style: TextButton.styleFrom(
-                        foregroundColor: const Color(0xFFD0607A),
+                        foregroundColor: AppColors.danger,
                       ),
                     ),
-                  const Spacer(),
+                  Expanded(
+                    child: saveError != null
+                        ? Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: Text(
+                              saveError,
+                              textAlign: TextAlign.end,
+                              style: const TextStyle(
+                                fontSize: 12.5,
+                                color: AppColors.danger,
+                              ),
+                            ),
+                          )
+                        : const SizedBox.shrink(),
+                  ),
                   FilledButton(
-                    onPressed: _saving ? null : _save,
+                    onPressed: _saving || _preparingImages ? null : _save,
                     child: Text(_isNew ? 'Agregar' : 'Guardar'),
                   ),
                 ],
@@ -420,28 +544,29 @@ class _DateField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final value = this.value;
     return Material(
-      color: Colors.white,
+      color: palette.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: AppColors.line),
+        side: BorderSide(color: palette.line),
       ),
       child: ListTile(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         contentPadding: const EdgeInsets.only(left: 14, right: 6),
         onTap: onTap,
-        leading: Icon(icon, color: AppColors.amethyst),
+        leading: Icon(icon, color: palette.amethyst),
         title: Text(
           label,
-          style: const TextStyle(fontSize: 12.5, color: AppColors.muted),
+          style: TextStyle(fontSize: 12.5, color: palette.muted),
         ),
         subtitle: Text(
           value == null ? placeholder : formatDate(value),
           style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w600,
-            color: value == null ? AppColors.muted : AppColors.ink,
+            color: value == null ? palette.muted : palette.ink,
           ),
         ),
         trailing: value != null && onClear != null
@@ -450,7 +575,63 @@ class _DateField extends StatelessWidget {
                 onPressed: onClear,
                 icon: const Icon(Icons.close_rounded, size: 18),
               )
-            : const Icon(Icons.edit_calendar_outlined, color: AppColors.muted),
+            : Icon(Icons.edit_calendar_outlined, color: palette.muted),
+      ),
+    );
+  }
+}
+
+/// One line of the activity log: who, what, when and what changed.
+class _ActivityRow extends StatelessWidget {
+  const _ActivityRow({required this.event, required this.isMe});
+
+  final ItemEvent event;
+  final bool isMe;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    final actor = event.actor;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Avatar(photoUrl: actor.photoUrl, name: actor.name, size: 30),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(
+                        text: isMe ? 'Tú' : actor.shortName,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      TextSpan(text: ' ${event.type.label}'),
+                    ],
+                  ),
+                  style: const TextStyle(fontSize: 14),
+                ),
+                for (final change in event.changes)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 3),
+                    child: Text(
+                      change,
+                      style: TextStyle(fontSize: 13, color: palette.ink),
+                    ),
+                  ),
+                const SizedBox(height: 2),
+                Text(
+                  formatDateTime(event.at),
+                  style: TextStyle(fontSize: 12, color: palette.muted),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -463,15 +644,16 @@ class _SectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Padding(
       padding: const EdgeInsets.only(top: 20, bottom: 10),
       child: Text(
         text.toUpperCase(),
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 11.5,
           letterSpacing: 1.4,
           fontWeight: FontWeight.w700,
-          color: AppColors.muted,
+          color: palette.muted,
         ),
       ),
     );
@@ -491,10 +673,11 @@ class _LinkRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
-        color: AppColors.lavender,
+        color: palette.soft,
         borderRadius: BorderRadius.circular(16),
         child: ListTile(
           dense: true,
@@ -503,10 +686,10 @@ class _LinkRow extends StatelessWidget {
             borderRadius: BorderRadius.circular(16),
           ),
           onTap: onOpen,
-          leading: const Icon(
+          leading: Icon(
             Icons.open_in_new_rounded,
             size: 18,
-            color: AppColors.amethyst,
+            color: palette.amethyst,
           ),
           title: Text(
             linkLabel(link),
@@ -525,9 +708,9 @@ class _LinkRow extends StatelessWidget {
 }
 
 class _ImageTile extends StatelessWidget {
-  const _ImageTile({required this.bytes, required this.onRemove});
+  const _ImageTile({required this.image, required this.onRemove});
 
-  final Future<Uint8List?> bytes;
+  final Future<ImageData?> image;
   final VoidCallback onRemove;
 
   @override
@@ -540,8 +723,8 @@ class _ImageTile extends StatelessWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(16),
             child: GestureDetector(
-              onTap: () => showImageViewer(context, bytes),
-              child: StoredImage(bytes: bytes),
+              onTap: () => showImageViewer(context, image),
+              child: StoredImage(image: image),
             ),
           ),
           Positioned(
@@ -571,34 +754,48 @@ class _ImageTile extends StatelessWidget {
 }
 
 class _AddImageTile extends StatelessWidget {
-  const _AddImageTile({required this.onTap});
+  const _AddImageTile({required this.onTap, this.busy = false});
 
   final VoidCallback onTap;
 
+  /// True while picked photos are being compressed.
+  final bool busy;
+
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Material(
-      color: Colors.white,
+      color: palette.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: AppColors.line),
+        side: BorderSide(color: palette.line),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: onTap,
-        child: const SizedBox.square(
+        onTap: busy ? null : onTap,
+        child: SizedBox.square(
           dimension: 92,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.add_photo_alternate_outlined, color: AppColors.rose),
-              SizedBox(height: 4),
-              Text(
-                'Galería',
-                style: TextStyle(fontSize: 12, color: AppColors.muted),
-              ),
-            ],
-          ),
+          child: busy
+              ? const Center(
+                  child: SizedBox.square(
+                    dimension: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2.5),
+                  ),
+                )
+              : Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.add_photo_alternate_outlined,
+                      color: AppColors.rose,
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'Galería',
+                      style: TextStyle(fontSize: 12, color: palette.muted),
+                    ),
+                  ],
+                ),
         ),
       ),
     );

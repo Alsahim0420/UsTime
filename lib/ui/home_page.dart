@@ -16,9 +16,20 @@ enum _Status {
 }
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key, required this.controller});
+  const HomePage({
+    super.key,
+    required this.controller,
+    this.title = 'Nuestra lista de cositas',
+    this.trailing,
+  });
 
   final BucketController controller;
+
+  /// Name of the list, shown as the page heading.
+  final String title;
+
+  /// Shown at the top right, e.g. the profile button.
+  final Widget? trailing;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -26,7 +37,9 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final _search = TextEditingController();
-  BucketCategory? _category;
+
+  /// Id of the category being filtered by, if any.
+  String? _category;
   _Status _status = _Status.all;
 
   BucketController get _controller => widget.controller;
@@ -37,10 +50,15 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
+  /// [_category], unless that category has since been deleted.
+  String? get _activeCategory =>
+      _controller.categories.any((c) => c.id == _category) ? _category : null;
+
   List<BucketItem> get _visibleItems {
     final query = _search.text.trim().toLowerCase();
+    final category = _activeCategory;
     return _controller.items.where((item) {
-      if (_category != null && item.category != _category) return false;
+      if (category != null && item.category != category) return false;
       if (_status == _Status.pending && item.done) return false;
       if (_status == _Status.done && !item.done) return false;
       if (query.isEmpty) return true;
@@ -55,15 +73,38 @@ class _HomePageState extends State<HomePage> {
       context,
       controller: _controller,
       item: item,
-      initialCategory: _category,
+      initialCategory: _activeCategory,
     );
     if (result == EditorResult.deleteRequested && item != null) {
       await _delete(item);
     }
   }
 
+  /// Runs a write and tells the user if it fails (offline, no permission).
+  /// Returns whether it succeeded.
+  Future<bool> _guard(Future<void> write) async {
+    try {
+      await write;
+      return true;
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(
+            const SnackBar(
+              width: 420,
+              content: Text(
+                'No se pudo guardar el cambio. Revisa tu conexión.',
+              ),
+            ),
+          );
+      }
+      return false;
+    }
+  }
+
   Future<void> _delete(BucketItem item) async {
-    await _controller.remove(item);
+    if (!await _guard(_controller.remove(item))) return;
     if (!mounted) return;
     final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
     final snackBar = messenger.showSnackBar(
@@ -74,7 +115,7 @@ class _HomePageState extends State<HomePage> {
         action: SnackBarAction(
           label: 'Deshacer',
           textColor: const Color(0xFFF7B6D2),
-          onPressed: () => _controller.save(item),
+          onPressed: () => _guard(_controller.save(item)),
         ),
       ),
     );
@@ -86,11 +127,12 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _openEditor,
-        backgroundColor: AppColors.amethyst,
-        foregroundColor: Colors.white,
+        backgroundColor: palette.amethyst,
+        foregroundColor: palette.surface,
         elevation: 3,
         icon: const Icon(Icons.add_rounded),
         label: const Text(
@@ -99,7 +141,7 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
       body: DecoratedBox(
-        decoration: const BoxDecoration(gradient: AppColors.background),
+        decoration: BoxDecoration(gradient: palette.background),
         child: SafeArea(
           child: ListenableBuilder(
             listenable: _controller,
@@ -116,6 +158,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildContent() {
+    final palette = context.palette;
     final items = _visibleItems;
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -131,18 +174,25 @@ class _HomePageState extends State<HomePage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'US TIME',
-                      style: TextStyle(
-                        fontSize: 12,
-                        letterSpacing: 3,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.amethyst,
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'US TIME',
+                            style: TextStyle(
+                              fontSize: 12,
+                              letterSpacing: 3,
+                              fontWeight: FontWeight.w700,
+                              color: palette.amethyst,
+                            ),
+                          ),
+                        ),
+                        ?widget.trailing,
+                      ],
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'Nuestra lista de cositas',
+                      widget.title,
                       style: displayStyle(
                         size: constraints.maxWidth < 600 ? 30 : 40,
                       ),
@@ -167,18 +217,18 @@ class _HomePageState extends State<HomePage> {
                   children: [
                     _CategoryChip(
                       label: 'Todo',
-                      emoji: '✨',
+                      icon: Icons.auto_awesome_rounded,
                       count: _controller.total,
-                      selected: _category == null,
+                      selected: _activeCategory == null,
                       onTap: () => setState(() => _category = null),
                     ),
-                    for (final category in BucketCategory.values)
+                    for (final category in _controller.categories)
                       _CategoryChip(
-                        label: category.label,
-                        emoji: category.emoji,
-                        count: _controller.countFor(category),
-                        selected: _category == category,
-                        onTap: () => setState(() => _category = category),
+                        label: category.name,
+                        icon: category.icon,
+                        count: _controller.countFor(category.id),
+                        selected: _activeCategory == category.id,
+                        onTap: () => setState(() => _category = category.id),
                       ),
                   ],
                 ),
@@ -208,9 +258,10 @@ class _HomePageState extends State<HomePage> {
                     return ItemCard(
                       key: ValueKey(item.id),
                       item: item,
+                      category: _controller.categoryFor(item.category),
                       imageFor: _controller.image,
                       onTap: () => _openEditor(item),
-                      onToggleDone: () => _controller.toggleDone(item),
+                      onToggleDone: () => _guard(_controller.toggleDone(item)),
                       onOpenLink: openLink,
                     );
                   },
@@ -223,12 +274,13 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildFilters(bool wide) {
+    final palette = context.palette;
     final search = TextField(
       controller: _search,
       onChanged: (_) => setState(() {}),
       decoration: InputDecoration(
         hintText: 'Buscar un plan, un lugar…',
-        prefixIcon: const Icon(Icons.search_rounded, color: AppColors.muted),
+        prefixIcon: Icon(Icons.search_rounded, color: palette.muted),
         suffixIcon: _search.text.isEmpty
             ? null
             : IconButton(
@@ -247,10 +299,10 @@ class _HomePageState extends State<HomePage> {
       selected: {_status},
       onSelectionChanged: (value) => setState(() => _status = value.first),
       style: SegmentedButton.styleFrom(
-        backgroundColor: Colors.white,
-        selectedBackgroundColor: AppColors.lavender,
-        selectedForegroundColor: AppColors.amethyst,
-        side: const BorderSide(color: AppColors.line),
+        backgroundColor: palette.surface,
+        selectedBackgroundColor: palette.soft,
+        selectedForegroundColor: palette.amethyst,
+        side: BorderSide(color: palette.line),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
       ),
     );
@@ -279,6 +331,7 @@ class _ProgressCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final progress = total == 0 ? 0.0 : done / total;
     final pending = total - done;
     final message = total == 0
@@ -294,7 +347,7 @@ class _ProgressCard extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: AppColors.hero,
         borderRadius: BorderRadius.circular(28),
-        boxShadow: softShadow(2.4),
+        boxShadow: palette.shadow(2.4),
       ),
       child: Row(
         children: [
@@ -357,31 +410,30 @@ class _ProgressCard extends StatelessWidget {
 class _CategoryChip extends StatelessWidget {
   const _CategoryChip({
     required this.label,
-    required this.emoji,
+    required this.icon,
     required this.count,
     required this.selected,
     required this.onTap,
   });
 
   final String label;
-  final String emoji;
+  final IconData icon;
   final int count;
   final bool selected;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final foreground = selected ? Colors.white : AppColors.ink;
+    final palette = context.palette;
+    final foreground = selected ? palette.surface : palette.ink;
     return Padding(
       padding: const EdgeInsets.only(right: 10),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         decoration: BoxDecoration(
-          color: selected ? AppColors.amethyst : Colors.white,
+          color: selected ? palette.amethyst : palette.surface,
           borderRadius: BorderRadius.circular(30),
-          border: Border.all(
-            color: selected ? AppColors.amethyst : AppColors.line,
-          ),
+          border: Border.all(color: selected ? palette.amethyst : palette.line),
         ),
         child: Material(
           type: MaterialType.transparency,
@@ -392,7 +444,7 @@ class _CategoryChip extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               child: Row(
                 children: [
-                  Text(emoji, style: const TextStyle(fontSize: 15)),
+                  Icon(icon, size: 17, color: foreground),
                   const SizedBox(width: 8),
                   Text(
                     label,
@@ -429,12 +481,25 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Padding(
       padding: const EdgeInsets.fromLTRB(32, 48, 32, 120),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Text('🐼❤️🐻', style: TextStyle(fontSize: 40)),
+          Container(
+            width: 72,
+            height: 72,
+            decoration: const BoxDecoration(
+              gradient: AppColors.hero,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.favorite_rounded,
+              color: Colors.white,
+              size: 34,
+            ),
+          ),
           const SizedBox(height: 16),
           Text(
             filtered ? 'Nada por aquí' : 'Su lista está vacía',
@@ -446,7 +511,7 @@ class _EmptyState extends StatelessWidget {
                 ? 'Prueben con otra búsqueda o filtro.'
                 : 'Agreguen el primer plan que quieran vivir juntos.',
             textAlign: TextAlign.center,
-            style: const TextStyle(color: AppColors.muted),
+            style: TextStyle(color: palette.muted),
           ),
           if (!filtered) ...[
             const SizedBox(height: 20),

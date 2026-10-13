@@ -1,0 +1,28 @@
+{
+  "flutter": {
+    "platforms": {
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "ustime-fd614",
+          "configurations": {
+            "web": "1:1073529992526:web:288f7131bbbd3105095a1f"
+          }
+        }
+      }
+    }
+  },
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "storage": {
+    "rules": "storage.rules"
+  },
+  "auth": {
+    "providers": {
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "Us Time",
+        "supportEmail": "panmecar@gmail.com"
+      }
+    }
+  }
+}
