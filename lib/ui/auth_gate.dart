@@ -104,7 +104,12 @@ class _SessionState extends State<_Session> {
   void _openProfile() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (context) => ProfilePage(user: widget.user, account: _account),
+        builder: (context) => ProfilePage(
+          account: _account,
+          name: widget.user.displayName,
+          email: widget.user.email,
+          photoUrl: widget.user.photoURL,
+        ),
       ),
     );
   }
